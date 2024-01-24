@@ -1,3 +1,4 @@
+// TODO: integrate latest authenticator logic in to osmosis-test-tube and used to test it here
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{Addr, Binary};

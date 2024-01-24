@@ -112,7 +112,7 @@ fn calculate_coin_delta(coin: &Coin, spend_coin: &Coin, balance_coin: &Coin) -> 
 #[cfg(test)]
 mod tests {
     use super::sudo_confirm_execution;
-    use crate::authenticate::sudo_authenticate;
+    use crate::authenticator_hooks::sudo_authenticate;
 
     use crate::contract::{instantiate, query_spend_limit};
     use crate::msg::InstantiateMsg;

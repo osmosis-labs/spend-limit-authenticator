@@ -5,11 +5,9 @@ use cosmwasm_std::{
 };
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
-use crate::authenticate::sudo_authenticate;
-use crate::confirm_execution::sudo_confirm_execution;
+use crate::authenticator_hooks::{sudo_authenticate, sudo_confirm_execution, sudo_track};
 use crate::msg::{InstantiateMsg, QueryMsg, SpendLimitDataResponse, SudoMsg};
 use crate::state::{Denom, Path, TrackedDenom, SPEND_LIMITS, TRACKED_DENOMS};
-use crate::track::sudo_track;
 use crate::ContractError;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
