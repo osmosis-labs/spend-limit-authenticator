@@ -4,7 +4,7 @@ use osmosis_authenticators::{AuthenticationRequest, AuthenticationResult};
 use crate::state::{AuthenticatorParams, SpendLimit, SPEND_LIMITS, USDC_DENOM};
 use crate::ContractError;
 
-pub fn sudo_authenticate(
+pub fn authenticate(
     deps: DepsMut,
     env: Env,
     auth_request: AuthenticationRequest,
@@ -49,7 +49,7 @@ pub fn sudo_authenticate(
 
 #[cfg(test)]
 mod tests {
-    use crate::authenticator_hooks::sudo_authenticate;
+    use crate::authenticator_hooks::authenticate;
     use crate::contract::{instantiate, query_spend_limit};
     use crate::msg::InstantiateMsg;
     use crate::state::AuthenticatorParams;
@@ -86,7 +86,7 @@ mod tests {
         instantiate(deps.as_mut(), env.clone(), info.clone(), InstantiateMsg {}).unwrap();
 
         let auth_request = create_mock_authentication_request();
-        let response = sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
+        let response = authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
 
         // Check if the authentication is successful
         assert_eq!(
@@ -136,7 +136,7 @@ mod tests {
         instantiate(deps.as_mut(), env.clone(), info.clone(), InstantiateMsg {}).unwrap();
 
         let auth_request = create_mock_authentication_request();
-        let response = sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
+        let response = authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
 
         // Check if the authentication is successful
         assert_eq!(
@@ -145,8 +145,7 @@ mod tests {
         );
 
         let auth_request = create_mock_authentication_request();
-        let _response =
-            sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
+        let _response = authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
 
         // Modify balances directly in the storage
         deps.querier = MockQuerier::new(&[(
@@ -169,8 +168,7 @@ mod tests {
         env.block.height += 100;
 
         let auth_request = create_mock_authentication_request();
-        let _response =
-            sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
+        let _response = authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
 
         let query_results =
             query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account")).unwrap();

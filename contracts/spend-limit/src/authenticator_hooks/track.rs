@@ -3,7 +3,7 @@ use cosmwasm_std::{DepsMut, Env, Response};
 use crate::ContractError;
 use osmosis_authenticators::{AuthenticationResult, TrackRequest};
 
-pub fn sudo_track(
+pub fn track(
     deps: DepsMut,
     _env: Env,
     track_request: TrackRequest,

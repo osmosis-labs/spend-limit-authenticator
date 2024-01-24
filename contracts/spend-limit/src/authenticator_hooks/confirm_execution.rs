@@ -5,7 +5,7 @@ use crate::state::{SpendLimit, SPEND_LIMITS, TRACKED_DENOMS};
 use crate::twap::calculate_price_from_route;
 use crate::ContractError;
 
-pub fn sudo_confirm_execution(
+pub fn confirm_execution(
     deps: DepsMut,
     env: Env,
     confirm_execution_request: ConfirmExecutionRequest,
@@ -111,8 +111,8 @@ fn calculate_coin_delta(coin: &Coin, spend_coin: &Coin, balance_coin: &Coin) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::sudo_confirm_execution;
-    use crate::authenticator_hooks::sudo_authenticate;
+    use super::confirm_execution;
+    use crate::authenticator_hooks::authenticate;
 
     use crate::contract::{instantiate, query_spend_limit};
     use crate::msg::InstantiateMsg;
@@ -157,7 +157,7 @@ mod tests {
 
         let auth_request = create_mock_authentication_request();
 
-        let result = sudo_authenticate(deps.as_mut(), env.clone(), auth_request);
+        let result = authenticate(deps.as_mut(), env.clone(), auth_request);
         let _query_results =
             query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account")).unwrap();
 
@@ -201,7 +201,7 @@ mod tests {
                 value: Binary::from(b"mock_msg_value".to_vec()),
             },
         };
-        let result = sudo_confirm_execution(deps.as_mut(), env.clone(), confirm_execution_request);
+        let result = confirm_execution(deps.as_mut(), env.clone(), confirm_execution_request);
         match result {
             Ok(response) => {
                 dbg!(response);

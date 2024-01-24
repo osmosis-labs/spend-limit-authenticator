@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
-use crate::authenticator_hooks::{sudo_authenticate, sudo_confirm_execution, sudo_track};
+use crate::authenticator_hooks;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendLimitDataResponse, SudoMsg};
 use crate::state::{Denom, Path, TrackedDenom, SPEND_LIMITS, TRACKED_DENOMS};
 use crate::ContractError;
@@ -52,10 +52,12 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
-        SudoMsg::Authenticate(auth_request) => sudo_authenticate(deps, env, auth_request),
-        SudoMsg::Track(track_request) => sudo_track(deps, env, track_request),
+        SudoMsg::Authenticate(auth_request) => {
+            authenticator_hooks::authenticate(deps, env, auth_request)
+        }
+        SudoMsg::Track(track_request) => authenticator_hooks::track(deps, env, track_request),
         SudoMsg::ConfirmExecution(confirm_execution_request) => {
-            sudo_confirm_execution(deps, env, confirm_execution_request)
+            authenticator_hooks::confirm_execution(deps, env, confirm_execution_request)
         }
     }
 }
