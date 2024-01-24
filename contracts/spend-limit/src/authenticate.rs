@@ -1,7 +1,6 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::{AuthenticationRequest, AuthenticationResult};
 
-use crate::bank::query_account_balances;
 use crate::state::{AuthenticatorParams, SpendLimit, SPEND_LIMITS, USDC_DENOM};
 use crate::ContractError;
 
@@ -12,7 +11,7 @@ pub fn sudo_authenticate(
 ) -> Result<Response, ContractError> {
     deps.api.debug(&format!("auth_request {:?}", auth_request));
     let account_address = auth_request.account;
-    let balances = query_account_balances(deps.as_ref(), &account_address)?;
+    let balances = deps.querier.query_all_balances(&account_address)?;
 
     // Load spend limits if they exist
     if let Some(mut spend_limit) =
@@ -146,7 +145,8 @@ mod tests {
         );
 
         let auth_request = create_mock_authentication_request();
-        let response = sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
+        let _response =
+            sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
 
         // Modify balances directly in the storage
         deps.querier = MockQuerier::new(&[(
@@ -169,7 +169,8 @@ mod tests {
         env.block.height += 100;
 
         let auth_request = create_mock_authentication_request();
-        let response = sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
+        let _response =
+            sudo_authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
 
         let query_results =
             query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account")).unwrap();

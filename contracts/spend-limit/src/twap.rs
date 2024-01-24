@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{Coin, Deps};
-use cosmwasm_std::{Decimal, StdResult, Timestamp, Uint128};
+use cosmwasm_std::{Decimal, Timestamp, Uint128};
 
 use osmosis_std::shim::Timestamp as OsmosisTimestamp;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
@@ -18,7 +18,7 @@ pub fn calculate_price_from_route(
 ) -> Result<Coin, ContractError> {
     if route.is_empty() {
         return Err(ContractError::InvalidPoolRoute {
-            reason: format!("Route must not be empty"),
+            reason: "Route must not be empty".to_string(),
         });
     }
 

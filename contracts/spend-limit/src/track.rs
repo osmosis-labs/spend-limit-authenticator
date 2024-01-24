@@ -11,5 +11,5 @@ pub fn sudo_track(
     deps.api
         .debug(&format!("track_request {:?}", track_request));
 
-    return Ok(Response::new().set_data(AuthenticationResult::Authenticated {}));
+    Ok(Response::new().set_data(AuthenticationResult::Authenticated {}))
 }

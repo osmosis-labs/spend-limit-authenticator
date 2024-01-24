@@ -73,5 +73,5 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 pub fn query_spend_limit(deps: Deps, account: Addr) -> StdResult<SpendLimitDataResponse> {
     let spend_limit_data = SPEND_LIMITS.load(deps.storage, account.to_string())?;
-    return Ok(SpendLimitDataResponse { spend_limit_data });
+    Ok(SpendLimitDataResponse { spend_limit_data })
 }

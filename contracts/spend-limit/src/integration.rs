@@ -77,7 +77,8 @@ mod tests {
         )
         .unwrap();
 
-        let wasm_byte_code = std::fs::read("../artifacts/spend_limit.wasm").unwrap();
+        let wasm_byte_code =
+            std::fs::read("../../target/wasm32-unknown-unknown/release/spend_limit.wasm").unwrap();
         println!("Deploying the spend_limit contract");
         let (_, spendlimit_address) =
             deploy_contract(&wasm, &owner, wasm_byte_code, &InstantiateMsg {});

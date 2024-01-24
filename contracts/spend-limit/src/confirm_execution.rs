@@ -1,9 +1,6 @@
-use cosmwasm_std::{
-    AllBalanceResponse, Coin, Decimal, Deps, DepsMut, Env, Response, StdError, StdResult, Uint128,
-};
+use cosmwasm_std::{Coin, Decimal, Deps, DepsMut, Env, Response, StdError, StdResult, Uint128};
 use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
 
-use crate::bank::query_account_balances;
 use crate::state::{SpendLimit, SPEND_LIMITS, TRACKED_DENOMS};
 use crate::twap::calculate_price_from_route;
 use crate::ContractError;
@@ -19,7 +16,7 @@ pub fn sudo_confirm_execution(
     ));
 
     let account_address = &confirm_execution_request.account;
-    let balances = query_account_balances(deps.as_ref(), account_address)?;
+    let balances = deps.querier.query_all_balances(account_address)?;
 
     let spend_limit = match SPEND_LIMITS.may_load(deps.storage, account_address.to_string())? {
         Some(spend_limit) => spend_limit,
@@ -51,18 +48,14 @@ pub fn sudo_confirm_execution(
 }
 
 fn calculate_delta(
-    prev_balances: &AllBalanceResponse,
-    balances: &AllBalanceResponse,
+    prev_balances: &[Coin],
+    balances: &[Coin],
     deps: Deps,
     env: &Env,
 ) -> Result<u128, ContractError> {
     let delta: u128 = 0;
-    for spend_coin in &prev_balances.amount {
-        if let Some(balance_coin) = balances
-            .amount
-            .iter()
-            .find(|coin| coin.denom == spend_coin.denom)
-        {
+    for spend_coin in prev_balances {
+        if let Some(balance_coin) = balances.iter().find(|coin| coin.denom == spend_coin.denom) {
             if let Some(coin_delta) = process_coin_delta(spend_coin, balance_coin, deps, env)? {
                 dbg!(coin_delta);
                 delta.checked_add(coin_delta).ok_or_else(|| {
@@ -120,29 +113,22 @@ fn calculate_coin_delta(coin: &Coin, spend_coin: &Coin, balance_coin: &Coin) -> 
 mod tests {
     use super::sudo_confirm_execution;
     use crate::authenticate::sudo_authenticate;
-    use crate::ContractError;
 
     use crate::contract::{instantiate, query_spend_limit};
     use crate::msg::InstantiateMsg;
-    use cosmwasm_std::testing::{
-        mock_dependencies_with_balances, mock_env, mock_info, BankQuerier, MockApi, MockQuerier,
-        MockQuerierCustomHandlerResult, MockStorage,
-    };
+    use cosmwasm_std::testing::{mock_env, mock_info, BankQuerier, MockApi, MockStorage};
     use cosmwasm_std::Empty;
     use cosmwasm_std::{
-        from_json, to_json_binary, Addr, Binary, Coin, ContractResult, CustomQuery, OwnedDeps,
-        Querier, QuerierResult, QuerierWrapper, QueryRequest, SystemError, SystemResult,
+        from_json, to_json_binary, Addr, Binary, Coin, CustomQuery, OwnedDeps, Querier,
+        QuerierResult, QueryRequest, SystemError, SystemResult,
     };
     use serde::de::DeserializeOwned;
 
     use core::marker::PhantomData;
     use osmosis_authenticators::{
-        Any, AuthenticationRequest, AuthenticationResult, ConfirmExecutionRequest,
-        ConfirmationResult, SignModeTxData, SignatureData, TxData,
+        Any, AuthenticationRequest, ConfirmExecutionRequest, SignModeTxData, SignatureData, TxData,
     };
-    use osmosis_std::types::osmosis::twap::v1beta1::{
-        ArithmeticTwapRequest, ArithmeticTwapResponse, GeometricTwapRequest, TwapQuerier,
-    };
+    use osmosis_std::types::osmosis::twap::v1beta1::ArithmeticTwapResponse;
 
     #[test]
     fn test_sudo_confirm_execution() {
@@ -165,15 +151,15 @@ mod tests {
             ],
         )]);
         let mut env = mock_env();
-        let mut info = mock_info("mock_signer", &[Coin::new(500, "uosmo")]);
+        let info = mock_info("mock_signer", &[Coin::new(500, "uosmo")]);
         let msg = InstantiateMsg {};
-        let resp = instantiate(deps.as_mut(), env.clone(), info, msg);
+        let _resp = instantiate(deps.as_mut(), env.clone(), info, msg);
 
         let auth_request = create_mock_authentication_request();
 
         let result = sudo_authenticate(deps.as_mut(), env.clone(), auth_request);
-        let query_results = query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account"));
-        dbg!(query_results);
+        let _query_results =
+            query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account")).unwrap();
 
         match result {
             Ok(response) => {
@@ -226,8 +212,8 @@ mod tests {
             }
         }
 
-        let query_results = query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account"));
-        dbg!(query_results);
+        let _query_results =
+            query_spend_limit(deps.as_ref(), Addr::unchecked("mock_account")).unwrap();
 
         //let resultConfirm =
         //    sudo_confirm_execution(deps.as_mut(), env.clone(), confirm_execution_request);
@@ -313,7 +299,7 @@ mod tests {
         pub fn handle_query(&self, request: &QueryRequest<C>) -> QuerierResult {
             match &request {
                 QueryRequest::Bank(bank_query) => self.bank.query(bank_query),
-                QueryRequest::Stargate { path, data } => {
+                QueryRequest::Stargate { path: _, data: _ } => {
                     // Create the response object.
                     let response = ArithmeticTwapResponse {
                         arithmetic_twap: "2.00".to_string(),

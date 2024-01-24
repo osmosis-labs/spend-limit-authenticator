@@ -2,7 +2,6 @@ pub mod authenticate;
 pub mod confirm_execution;
 pub mod track;
 
-pub mod bank;
 pub mod twap;
 
 pub mod contract;
