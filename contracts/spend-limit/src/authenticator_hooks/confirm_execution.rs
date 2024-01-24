@@ -1,7 +1,8 @@
 use cosmwasm_std::{Coin, Decimal, Deps, DepsMut, Env, Response, StdError, StdResult, Uint128};
 use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
 
-use crate::state::{SpendLimit, SPEND_LIMITS, TRACKED_DENOMS};
+use crate::spend_limit::SpendLimit;
+use crate::state::{SPEND_LIMITS, TRACKED_DENOMS};
 use crate::twap::calculate_price_from_route;
 use crate::ContractError;
 

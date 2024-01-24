@@ -1,6 +1,7 @@
-use crate::state::SpendLimit;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Addr;
+
+use crate::spend_limit::SpendLimit;
 
 #[cw_serde]
 pub struct InstantiateMsg {}

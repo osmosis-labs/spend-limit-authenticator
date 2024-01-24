@@ -1,8 +1,17 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::{AuthenticationRequest, AuthenticationResult};
 
-use crate::state::{AuthenticatorParams, SpendLimit, SPEND_LIMITS, USDC_DENOM};
+use crate::spend_limit::SpendLimit;
+use crate::state::{SPEND_LIMITS, USDC_DENOM};
 use crate::ContractError;
+
+#[cw_serde]
+pub struct AuthenticatorParams {
+    pub id: String,
+    pub duration: u64,
+    pub limit: u128,
+}
 
 pub fn authenticate(
     deps: DepsMut,
@@ -49,10 +58,9 @@ pub fn authenticate(
 
 #[cfg(test)]
 mod tests {
-    use crate::authenticator_hooks::authenticate;
+    use super::*;
     use crate::contract::{instantiate, query_spend_limit};
     use crate::msg::InstantiateMsg;
-    use crate::state::AuthenticatorParams;
 
     use cosmwasm_std::testing::{
         mock_dependencies_with_balances, mock_env, mock_info, MockQuerier,
