@@ -1,0 +1,7 @@
+{
+  "out": "./docs",
+  "name": "spend-limit-authenticator",
+  "theme": "markdown",
+  "readme": "none",
+  "tsconfig": "./tsconfig.bundle.json"
+}
