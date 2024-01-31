@@ -2,8 +2,8 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::{AuthenticationRequest, AuthenticationResult};
 
-use crate::spend_limit::SpendLimit;
-use crate::state::{SPEND_LIMITS, USDC_DENOM};
+use crate::spend_limit::DeprecatedSpendLimit;
+use crate::state::{DEPRECATED_SPEND_LIMITS, USDC_DENOM};
 use crate::ContractError;
 
 #[cw_serde]
@@ -24,7 +24,7 @@ pub fn authenticate(
 
     // Load spend limits if they exist
     if let Some(mut spend_limit) =
-        SPEND_LIMITS.may_load(deps.storage, account_address.to_string())?
+        DEPRECATED_SPEND_LIMITS.may_load(deps.storage, account_address.to_string())?
     {
         spend_limit.balance = balances.clone();
         if env.block.height - spend_limit.block_of_last_tx > spend_limit.number_of_blocks_active {
@@ -32,7 +32,7 @@ pub fn authenticate(
             // SPEND_LIMITS.remove(deps.storage, account_address.to_string());
             return Ok(Response::new().set_data(AuthenticationResult::NotAuthenticated {}));
         }
-        SPEND_LIMITS.save(deps.storage, account_address.to_string(), &spend_limit)?;
+        DEPRECATED_SPEND_LIMITS.save(deps.storage, account_address.to_string(), &spend_limit)?;
     }
 
     // Handle new authentication with authenticator_params
@@ -41,7 +41,7 @@ pub fn authenticate(
             serde_json_wasm::from_slice::<AuthenticatorParams>(params_binary)
                 .map_err(|_| ContractError::InvalidAuthenticatorParams {})?;
 
-        let spend_limit = SpendLimit {
+        let spend_limit = DeprecatedSpendLimit {
             id: authenticator_params.id.clone(),
             denom: String::from(USDC_DENOM),
             amount_left: authenticator_params.limit,
@@ -49,7 +49,7 @@ pub fn authenticate(
             block_of_last_tx: env.block.height,
             number_of_blocks_active: authenticator_params.duration,
         };
-        SPEND_LIMITS.save(deps.storage, account_address.to_string(), &spend_limit)?;
+        DEPRECATED_SPEND_LIMITS.save(deps.storage, account_address.to_string(), &spend_limit)?;
         return Ok(Response::new().set_data(AuthenticationResult::Authenticated {}));
     }
 

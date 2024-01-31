@@ -1,8 +1,8 @@
 use cosmwasm_std::{Coin, Decimal, Deps, DepsMut, Env, Response, StdError, StdResult, Uint128};
 use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
 
-use crate::spend_limit::SpendLimit;
-use crate::state::{SPEND_LIMITS, TRACKED_DENOMS};
+use crate::spend_limit::DeprecatedSpendLimit;
+use crate::state::{DEPRECATED_SPEND_LIMITS, TRACKED_DENOMS};
 use crate::twap::calculate_price_from_route;
 use crate::ContractError;
 
@@ -19,17 +19,18 @@ pub fn confirm_execution(
     let account_address = &confirm_execution_request.account;
     let balances = deps.querier.query_all_balances(account_address)?;
 
-    let spend_limit = match SPEND_LIMITS.may_load(deps.storage, account_address.to_string())? {
-        Some(spend_limit) => spend_limit,
-        // XXX; here we return confirm because in the post handler confirm_execution is
-        // called before sudo_authenticate
-        None => return Ok(Response::new().set_data(ConfirmationResult::Confirm {})),
-    };
+    let spend_limit =
+        match DEPRECATED_SPEND_LIMITS.may_load(deps.storage, account_address.to_string())? {
+            Some(spend_limit) => spend_limit,
+            // XXX; here we return confirm because in the post handler confirm_execution is
+            // called before sudo_authenticate
+            None => return Ok(Response::new().set_data(ConfirmationResult::Confirm {})),
+        };
 
     //dbg!(spend_limit.clone());
     let delta = calculate_delta(&spend_limit.balance, &balances, deps.as_ref(), &env)?;
     dbg!(delta);
-    let updated_spend_limit = SpendLimit {
+    let updated_spend_limit = DeprecatedSpendLimit {
         id: spend_limit.id.clone(),
         denom: spend_limit.denom.clone(),
         amount_left: spend_limit.amount_left.saturating_sub(delta),
@@ -39,7 +40,7 @@ pub fn confirm_execution(
     };
     //dbg!(updated_spend_limit.clone());
 
-    SPEND_LIMITS.save(
+    DEPRECATED_SPEND_LIMITS.save(
         deps.storage,
         account_address.to_string(),
         &updated_spend_limit,

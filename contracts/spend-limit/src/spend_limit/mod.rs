@@ -1,14 +1,18 @@
-// TODO: Move core spend limit logic here
+mod error;
+mod period;
+mod price;
+mod storage;
+
+pub use storage::SpendLimitStorage;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Coin};
+use cosmwasm_std::Coin;
 
-// The idea is:
-// - track spend limit overtime
-// - value is denominated in a specific coin
-// - another price oracle conrtact is used to keep track of a cached the price of the coin
+use period::Period;
+use price::PriceStrategy;
+
 #[cw_serde]
-pub struct SpendLimit {
+pub struct DeprecatedSpendLimit {
     pub id: String,
     pub denom: String,
     pub balance: Vec<Coin>,
@@ -18,15 +22,18 @@ pub struct SpendLimit {
 }
 
 #[cw_serde]
-pub enum PriceStrategy {
-    /// Using just the amount of the given denom to determine quota.
-    AbsoluteValue,
+pub struct SpendLimitParams {
+    /// Subkey for the account, to allow multiple spend limits per account
+    subkey: String,
 
-    /// Using a price oracle contract to determine the price of the coin.
-    /// Spending can be done in any coin, as long as price oracle contract provides the price.
-    ///
-    /// The contract must implement the following query:
-    /// - request:  `{ "get_price" { "denom": "<denom>" } }`
-    /// - response: `{ "price": "<price>" }`
-    PriceOracle { contract_address: Addr },
+    /// limit per period
+    /// if the price strategy is absolute value, this requires no conversion
+    /// if the price strategy is price oracle, this requires conversion and this coin denom is used as the quote denom
+    limit: Coin,
+
+    /// Period to reset spend limit quota
+    reset_period: Period,
+
+    /// Price strategy to determine limit quota
+    price_strategy: PriceStrategy,
 }

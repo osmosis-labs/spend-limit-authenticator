@@ -7,7 +7,7 @@ use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::authenticator_hooks;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendLimitDataResponse, SudoMsg};
-use crate::state::{Denom, Path, TrackedDenom, SPEND_LIMITS, TRACKED_DENOMS};
+use crate::state::{Denom, Path, TrackedDenom, DEPRECATED_SPEND_LIMITS, TRACKED_DENOMS};
 use crate::ContractError;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -72,6 +72,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn query_spend_limit(deps: Deps, account: Addr) -> StdResult<SpendLimitDataResponse> {
-    let spend_limit_data = SPEND_LIMITS.load(deps.storage, account.to_string())?;
+    let spend_limit_data = DEPRECATED_SPEND_LIMITS.load(deps.storage, account.to_string())?;
     Ok(SpendLimitDataResponse { spend_limit_data })
 }

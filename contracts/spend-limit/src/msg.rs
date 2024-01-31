@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Addr;
 
-use crate::spend_limit::SpendLimit;
+use crate::spend_limit::DeprecatedSpendLimit;
 
 #[cw_serde]
 pub struct InstantiateMsg {}
@@ -22,5 +22,5 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct SpendLimitDataResponse {
-    pub spend_limit_data: SpendLimit,
+    pub spend_limit_data: DeprecatedSpendLimit,
 }
