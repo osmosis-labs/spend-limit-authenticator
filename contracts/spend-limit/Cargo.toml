@@ -18,6 +18,8 @@ osmosis-authenticators = "0.22.0-alpha.3"
 serde-json-wasm = "1.0.0"
 thiserror = { version = "1.0.23" }
 osmosis-std = "0.20.1"
+time = { version = "0.3.31", features = ["macros"] }
+rstest = "0.18.2"
 
 [package.metadata.scripts]
 optimize = """docker run --rm -v "$(pwd)":/code \
@@ -27,5 +29,6 @@ optimize = """docker run --rm -v "$(pwd)":/code \
 """
 
 [dev-dependencies]
+rstest = "0.18.2"
 #osmosis-test-tube = "20.1.2"
 #sylvia = { version = "0.9.2", features = ["mt"] }
