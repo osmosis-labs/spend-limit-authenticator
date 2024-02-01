@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cw_storage_plus::Map;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
-use crate::spend_limit::{DeprecatedSpendLimit, SpendLimitStorage};
+use crate::spend_limit::{DeprecatedSpendLimit, SpendingStorage};
 
 pub const USDC_DENOM: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
 pub const TRACKED_DENOMS_IN_MEMORY: &str = "TBD";
@@ -19,4 +19,4 @@ pub struct TrackedDenom {
 pub type Denom = String;
 pub type Path = Vec<SwapAmountInRoute>;
 
-pub const SPEND_LIMITS: SpendLimitStorage<'_> = Map::new("spend_limits");
+pub const SPENDINGS: SpendingStorage<'_> = Map::new("spendings");

@@ -3,16 +3,6 @@ use cosmwasm_std::{ensure, Timestamp};
 use thiserror::Error;
 use time::OffsetDateTime;
 
-/// Period of time for spend limit.
-/// Note that week is Monday-based.
-#[cw_serde]
-pub enum Period {
-    Day,
-    Week,
-    Month,
-    Year,
-}
-
 #[derive(Error, Debug, PartialEq)]
 pub enum PeriodError {
     #[error("Timestamp conversion cause component out of range: {0}")]
@@ -27,52 +17,64 @@ pub enum PeriodError {
 
 type PeriodResult<T> = Result<T, PeriodError>;
 
-/// Check whether the current time has entered new [`Period`]
-/// compared to the previous time.
-pub fn has_entered_new_period(
-    period: Period,
-    previous: OffsetDateTime,
-    current: OffsetDateTime,
-) -> PeriodResult<bool> {
-    // if the current time is the same as the previous time,
-    // it means that the tx is executed in the same block.
-    // In that case, we can assume that the tx is not executed in the new period.
-    if previous == current {
-        return Ok(false);
+/// Period of time for spend limit.
+/// Note that week is Monday-based.
+#[cw_serde]
+pub enum Period {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+impl Period {
+    /// Check whether the current time has entered new [`Period`]
+    /// compared to the previous time.
+    pub fn has_changed(
+        &self,
+        previous: OffsetDateTime,
+        current: OffsetDateTime,
+    ) -> PeriodResult<bool> {
+        // if the current time is the same as the previous time,
+        // it means that the tx is executed in the same block.
+        // In that case, we can assume that the tx is not executed in the new period.
+        if previous == current {
+            return Ok(false);
+        }
+
+        // ensure previous time is before or the same as  current time
+        ensure!(
+            previous <= current,
+            PeriodError::InvalidTimeComparison { previous, current }
+        );
+
+        // otherwise, check whether the current time has entered new period
+        // based on the period type.
+        Ok(match self {
+            Period::Day => previous.date() < current.date(),
+            Period::Week => {
+                let prev_spent_at_week = previous.monday_based_week();
+                let current_week = current.monday_based_week();
+
+                let has_entered_new_year = previous.year() < current.year();
+                let is_same_year_but_entered_new_week =
+                    previous.year() == current.year() && prev_spent_at_week < current_week;
+
+                has_entered_new_year || is_same_year_but_entered_new_week
+            }
+            Period::Month => {
+                let prev_spent_at_month = previous.month() as u8;
+                let current_month = current.month() as u8;
+
+                let has_entered_new_year = previous.year() < current.year();
+                let is_same_year_but_entered_new_month =
+                    previous.year() == current.year() && prev_spent_at_month < current_month;
+
+                has_entered_new_year || is_same_year_but_entered_new_month
+            }
+            Period::Year => previous.year() < current.year(),
+        })
     }
-
-    // ensure previous time is before or the same as  current time
-    ensure!(
-        previous <= current,
-        PeriodError::InvalidTimeComparison { previous, current }
-    );
-
-    // otherwise, check whether the current time has entered new period
-    // based on the period type.
-    Ok(match period {
-        Period::Day => previous.date() < current.date(),
-        Period::Week => {
-            let prev_spent_at_week = previous.monday_based_week();
-            let current_week = current.monday_based_week();
-
-            let has_entered_new_year = previous.year() < current.year();
-            let is_same_year_but_entered_new_week =
-                previous.year() == current.year() && prev_spent_at_week < current_week;
-
-            has_entered_new_year || is_same_year_but_entered_new_week
-        }
-        Period::Month => {
-            let prev_spent_at_month = previous.month() as u8;
-            let current_month = current.month() as u8;
-
-            let has_entered_new_year = previous.year() < current.year();
-            let is_same_year_but_entered_new_month =
-                previous.year() == current.year() && prev_spent_at_month < current_month;
-
-            has_entered_new_year || is_same_year_but_entered_new_month
-        }
-        Period::Year => previous.year() < current.year(),
-    })
 }
 
 /// Convert Timestamp to OffsetDateTime.
@@ -119,13 +121,13 @@ mod tests {
     #[case(Period::Day, datetime!(2022-01-01 0:00:00 UTC), datetime!(2021-12-31 23:59:59 UTC), Err(PeriodError::InvalidTimeComparison { previous, current }))]
     #[case(Period::Day, datetime!(2022-05-07 0:00:00 UTC), datetime!(2022-05-06 23:59:59 UTC), Err(PeriodError::InvalidTimeComparison { previous, current }))]
 
-    fn test_has_entered_new_period(
+    fn test_period_has_changed(
         #[case] period: Period,
         #[case] previous: OffsetDateTime,
         #[case] current: OffsetDateTime,
         #[case] expected: PeriodResult<bool>,
     ) {
-        assert_eq!(has_entered_new_period(period, previous, current), expected);
+        assert_eq!(period.has_changed(previous, current), expected);
     }
 
     #[rstest]

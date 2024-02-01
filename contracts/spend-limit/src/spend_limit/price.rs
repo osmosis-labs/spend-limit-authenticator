@@ -2,8 +2,8 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Addr;
 
 #[cw_serde]
-pub enum PriceStrategy {
-    /// Using just the amount of the given denom to determine quota.
+pub enum ValueStrategy {
+    /// Using just the amount of the given denom to determine limit.
     AbsoluteValue,
 
     /// Using a price oracle contract to determine the price of the coin.
