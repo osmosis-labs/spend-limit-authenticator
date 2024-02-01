@@ -127,4 +127,15 @@ mod tests {
     ) {
         assert_eq!(has_entered_new_period(period, previous, current), expected);
     }
+
+    #[rstest]
+    #[case(0, datetime!(1970-01-01 00:00:00 UTC))]
+    #[case(1706756691000000000, datetime!(2024-02-01 03:04:51 UTC))]
+    #[case(u64::MAX, datetime!(2554-07-21 23:34:33.709551615 UTC))]
+    fn test_to_offset_datetime(#[case] nanos_since_epoch: u64, #[case] expected: OffsetDateTime) {
+        assert_eq!(
+            Ok(expected),
+            to_offset_datetime(&Timestamp::from_nanos(nanos_since_epoch)),
+        );
+    }
 }
