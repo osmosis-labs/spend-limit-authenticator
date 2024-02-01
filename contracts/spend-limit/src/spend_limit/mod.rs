@@ -1,3 +1,4 @@
+mod balance;
 mod error;
 mod period;
 mod price;
@@ -50,6 +51,10 @@ impl<'a> SpendingKey<'a> {
 #[cw_serde]
 #[derive(Default)]
 pub struct Spending {
+    /// Used for tracking the balances of the account
+    /// before executing the tx.
+    pub balances_before_spent: Vec<Coin>,
+
     /// The value spent in the current period
     /// This is reset when the period changes
     pub value_spent_in_period: Uint128,
@@ -78,11 +83,13 @@ pub struct SpendLimitParams {
 impl Spending {
     pub fn new(last_spent: Timestamp) -> Self {
         Self {
+            balances_before_spent: vec![],
             value_spent_in_period: Uint128::zero(),
             last_spent_at: last_spent,
         }
     }
 
+    // TODO: rename to update and add enum (Spend, Receive)
     pub fn spend(
         self,
         amount: Uint128,
@@ -110,12 +117,17 @@ impl Spending {
         Ok(Self {
             value_spent_in_period,
             last_spent_at: at,
+            ..self
         })
     }
 
     /// Get the value spent in the period.
     /// If the period has changed, the value spent in the period is reset to zero.
-    fn get_or_reset_value_spent(self, period: &Period, at: Timestamp) -> SpendLimitResult<Uint128> {
+    fn get_or_reset_value_spent(
+        &self,
+        period: &Period,
+        at: Timestamp,
+    ) -> SpendLimitResult<Uint128> {
         let previous = to_offset_datetime(&self.last_spent_at)?;
         let current = to_offset_datetime(&at)?;
 
