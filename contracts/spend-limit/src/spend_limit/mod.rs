@@ -1,4 +1,4 @@
-mod balance;
+mod delta;
 mod error;
 mod period;
 mod price;
@@ -28,6 +28,10 @@ use self::{error::SpendLimitResult, period::to_offset_datetime};
 
 pub type SpendingStorage<'a> = Map<'a, SpendingKey<'a>, Spending>;
 
+/// TransientBalanceTracker is a map of spending keys to the coins spent.
+///
+pub type TransientBalanceTracker<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
+
 /// SpendingKey is a key for the spending storage.
 /// It is a tuple of (account, subkey) which
 /// allows multiple spend limits per account.
@@ -51,10 +55,6 @@ impl<'a> SpendingKey<'a> {
 #[cw_serde]
 #[derive(Default)]
 pub struct Spending {
-    /// Used for tracking the balances of the account
-    /// before executing the tx.
-    pub balances_before_spent: Vec<Coin>,
-
     /// The value spent in the current period
     /// This is reset when the period changes
     pub value_spent_in_period: Uint128,
@@ -83,7 +83,6 @@ pub struct SpendLimitParams {
 impl Spending {
     pub fn new(last_spent: Timestamp) -> Self {
         Self {
-            balances_before_spent: vec![],
             value_spent_in_period: Uint128::zero(),
             last_spent_at: last_spent,
         }
