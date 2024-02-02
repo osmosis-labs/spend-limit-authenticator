@@ -1,6 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Coin;
-use cw_storage_plus::{Item, Map};
+use cw_storage_plus::Map;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::spend_limit::{DeprecatedSpendLimit, SpendingStorage};
@@ -21,4 +20,3 @@ pub type Denom = String;
 pub type Path = Vec<SwapAmountInRoute>;
 
 pub const SPENDINGS: SpendingStorage<'_> = Map::new("spendings");
-
