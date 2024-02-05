@@ -1,0 +1,3 @@
+{
+  "rust-analyzer.linkedProjects": ["./contracts/spend-limit/Cargo.toml"]
+}

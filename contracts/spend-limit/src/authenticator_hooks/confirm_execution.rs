@@ -154,7 +154,9 @@ mod tests {
         )]);
         let mut env = mock_env();
         let info = mock_info("mock_signer", &[Coin::new(500, "uosmo")]);
-        let msg = InstantiateMsg {};
+        let msg = InstantiateMsg {
+            price_oracle_contract_addr: "mock_price_oracle_contract_addr".to_string(),
+        };
         let _resp = instantiate(deps.as_mut(), env.clone(), info, msg);
 
         let auth_request = create_mock_authentication_request();

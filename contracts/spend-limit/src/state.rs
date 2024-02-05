@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
-use cw_storage_plus::Map;
+use cosmwasm_std::Addr;
+use cw_storage_plus::{Item, Map};
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::spend_limit::{DeprecatedSpendLimit, SpendingStorage, TransientBalanceTracker};
@@ -28,3 +29,6 @@ pub const SPENDINGS: SpendingStorage<'_> = Map::new("spendings");
 /// It's lifetime is only within one authenticator's lifecycle.
 pub const TRANSIENT_BALANCE_TRACKER: TransientBalanceTracker<'_> =
     Map::new("transient_balance_tracker");
+
+/// Contract address of the price oracle used for determining the price of the assets.
+pub const PRICE_ORACLE_CONTRACT_ADDR: Item<Addr> = Item::new("price_oracle_contract_addr");

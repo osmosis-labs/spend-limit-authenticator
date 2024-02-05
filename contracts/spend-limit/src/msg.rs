@@ -4,7 +4,9 @@ use cosmwasm_std::Addr;
 use crate::spend_limit::DeprecatedSpendLimit;
 
 #[cw_serde]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub price_oracle_contract_addr: String,
+}
 
 #[cw_serde]
 pub enum SudoMsg {

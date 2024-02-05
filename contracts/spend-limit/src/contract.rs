@@ -3,49 +3,31 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
 };
-use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
+use cw2::set_contract_version;
 
 use crate::authenticator_hooks;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendLimitDataResponse, SudoMsg};
-use crate::state::{Denom, Path, TrackedDenom, DEPRECATED_SPEND_LIMITS, TRACKED_DENOMS};
+use crate::state::{DEPRECATED_SPEND_LIMITS, PRICE_ORACLE_CONTRACT_ADDR};
 use crate::ContractError;
+
+const CONTRACT_NAME: &str = "crates.io:spend-limit";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, StdError> {
-    // Create mock data for Denom and Path
-    let osmo_denom: Denom = "uosmo".to_string();
-    let osmo_usdc_path: Path = vec![SwapAmountInRoute {
-        pool_id: 1,
-        token_out_denom: "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4"
-            .to_string(),
-    }];
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let atom_denom: Denom =
-        "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2".to_string();
-    let atom_usdc_path: Path = vec![SwapAmountInRoute {
-        pool_id: 2,
-        token_out_denom: "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4"
-            .to_string(),
-    }];
+    // TODO: validate the price oracle contract via cw2
+    PRICE_ORACLE_CONTRACT_ADDR.save(
+        deps.storage,
+        &deps.api.addr_validate(&msg.price_oracle_contract_addr)?,
+    )?;
 
-    // Create a TrackedDenom instance using the InstantiateMsg data
-    let tracked_denom = TrackedDenom {
-        denom: osmo_denom.clone(),
-        path: osmo_usdc_path.clone(),
-    };
-    let atom_tracked_denom = TrackedDenom {
-        denom: atom_denom.clone(),
-        path: atom_usdc_path.clone(),
-    };
-
-    // Store the TrackedDenom in the map
-    TRACKED_DENOMS.save(deps.storage, osmo_denom, &tracked_denom)?;
-    TRACKED_DENOMS.save(deps.storage, atom_denom, &atom_tracked_denom)?;
     Ok(Response::new())
 }
 

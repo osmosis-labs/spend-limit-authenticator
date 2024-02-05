@@ -91,7 +91,15 @@ mod tests {
         )]);
         let env = mock_env();
         let info = mock_info("mock_signer", &[]);
-        instantiate(deps.as_mut(), env.clone(), info.clone(), InstantiateMsg {}).unwrap();
+        instantiate(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            InstantiateMsg {
+                price_oracle_contract_addr: String::from("mock_price_oracle_contract_addr"),
+            },
+        )
+        .unwrap();
 
         let auth_request = create_mock_authentication_request();
         let response = authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();
@@ -141,7 +149,15 @@ mod tests {
         )]);
         let mut env = mock_env();
         let info = mock_info("mock_signer", &[]);
-        instantiate(deps.as_mut(), env.clone(), info.clone(), InstantiateMsg {}).unwrap();
+        instantiate(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            InstantiateMsg {
+                price_oracle_contract_addr: String::from("mock_price_oracle_contract_addr"),
+            },
+        )
+        .unwrap();
 
         let auth_request = create_mock_authentication_request();
         let response = authenticate(deps.as_mut(), env.clone(), auth_request.clone()).unwrap();

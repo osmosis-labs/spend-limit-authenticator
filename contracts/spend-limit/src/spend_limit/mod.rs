@@ -51,8 +51,8 @@ pub struct SpendLimitParams {
     /// Subkey for the account, to allow multiple spend limits per account
     subkey: String,
 
-    /// Limit per period, used to enforce spend limit with this given amount and denom,
-    /// calculated based on value strategy.
+    /// Limit per period, used to enforce spend limit with this given amount and denom.
+    /// The denom is used as quote currency for the spend limit.
     limit: Coin,
 
     /// Period to reset spend limit quota
