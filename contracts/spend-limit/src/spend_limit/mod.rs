@@ -1,7 +1,7 @@
-mod delta;
 mod error;
 mod period;
 mod price;
+mod spending;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure, Coin, Fraction};
@@ -88,7 +88,6 @@ impl Spending {
         }
     }
 
-    // TODO: rename to update and add enum (Spend, Receive)
     pub fn spend(
         self,
         amount: Uint128,
@@ -107,7 +106,7 @@ impl Spending {
         // ensure that the value spent in the period is not over the limit
         ensure!(
             value_spent_in_period <= limit,
-            SpendLimitError::OverSpent {
+            SpendLimitError::Overspent {
                 remaining: limit.saturating_sub(value_spent_in_period),
                 requested: spending_value,
             }
@@ -191,7 +190,7 @@ mod tests {
 
         assert_eq!(
             err,
-            SpendLimitError::OverSpent {
+            SpendLimitError::Overspent {
                 remaining: Uint128::zero(),
                 requested: Uint128::from(50_000_001u128),
             }

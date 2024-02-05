@@ -2,7 +2,7 @@ use cosmwasm_schema::cw_serde;
 use cw_storage_plus::Map;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
-use crate::spend_limit::{DeprecatedSpendLimit, SpendingStorage};
+use crate::spend_limit::{DeprecatedSpendLimit, SpendingStorage, TransientBalanceTracker};
 
 pub const USDC_DENOM: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
 pub const TRACKED_DENOMS_IN_MEMORY: &str = "TBD";
@@ -20,3 +20,11 @@ pub type Denom = String;
 pub type Path = Vec<SwapAmountInRoute>;
 
 pub const SPENDINGS: SpendingStorage<'_> = Map::new("spendings");
+
+/// TransientBalanceTracker is a map of spending keys to the account balances.
+/// It is used to track the balances of the accounts before the transaction is executed,
+/// and compare it with the balances after the transaction is executed.
+///
+/// It's lifetime is only within one authenticator's lifecycle.
+pub const TRANSIENT_BALANCE_TRACKER: TransientBalanceTracker<'_> =
+    Map::new("transient_balance_tracker");

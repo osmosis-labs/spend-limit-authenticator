@@ -11,7 +11,7 @@ pub enum SpendLimitError {
     AccumulatingSpentValueError(#[from] OverflowError),
 
     #[error("Overspent: remaining qouta {remaining}, requested {requested}")]
-    OverSpent {
+    Overspent {
         remaining: Uint128,
         requested: Uint128,
         // TODO: add `reset_at: OffsetDateTime`
