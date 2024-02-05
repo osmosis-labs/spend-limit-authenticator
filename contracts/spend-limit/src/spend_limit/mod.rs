@@ -1,12 +1,10 @@
 mod error;
 mod period;
-mod price;
 mod spending;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Coin;
 use period::Period;
-use price::ValueStrategy;
 use spending::Spending;
 
 #[cw_serde]
@@ -27,7 +25,6 @@ use cw_storage_plus::Map;
 pub type SpendingStorage<'a> = Map<'a, SpendingKey<'a>, Spending>;
 
 /// TransientBalanceTracker is a map of spending keys to the coins spent.
-///
 pub type TransientBalanceTracker<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
 
 /// SpendingKey is a key for the spending storage.
@@ -60,7 +57,4 @@ pub struct SpendLimitParams {
 
     /// Period to reset spend limit quota
     reset_period: Period,
-
-    /// Strategy to calculate the value of the coin spent.
-    value_strategy: ValueStrategy,
 }
