@@ -1,11 +1,14 @@
 mod error;
+mod params;
 mod period;
 mod spending;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Coin;
-use period::Period;
-use spending::Spending;
+
+pub use error::SpendLimitError;
+pub use params::SpendLimitParams;
+pub use spending::{calculate_spent_coins, Spending};
 
 #[cw_serde]
 pub struct DeprecatedSpendLimit {
@@ -30,31 +33,4 @@ pub type TransientBalanceTracker<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
 /// SpendingKey is a key for the spending storage.
 /// It is a tuple of (account, subkey) which
 /// allows multiple spend limits per account.
-pub struct SpendingKey<'a>(&'a Addr, &'a str);
-
-impl<'a> SpendingKey<'a> {
-    pub fn new(addr: &'a Addr, subkey: &'a str) -> Self {
-        Self(addr, subkey)
-    }
-
-    pub fn account(&self) -> &Addr {
-        self.0
-    }
-
-    pub fn subkey(&self) -> &str {
-        self.1
-    }
-}
-
-#[cw_serde]
-pub struct SpendLimitParams {
-    /// Subkey for the account, to allow multiple spend limits per account
-    subkey: String,
-
-    /// Limit per period, used to enforce spend limit with this given amount and denom.
-    /// The denom is used as quote currency for the spend limit.
-    limit: Coin,
-
-    /// Period to reset spend limit quota
-    reset_period: Period,
-}
+pub type SpendingKey<'a> = (&'a Addr, &'a str);

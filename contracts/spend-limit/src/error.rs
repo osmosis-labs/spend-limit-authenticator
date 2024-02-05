@@ -2,6 +2,8 @@ use thiserror::Error;
 
 use cosmwasm_std::StdError;
 
+use crate::{authenticator_hooks::AuthenticatorError, spend_limit::SpendLimitError};
+
 /// Never is a placeholder to ensure we don't return any errors
 #[derive(Error, Debug)]
 pub enum Never {}
@@ -14,8 +16,11 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("InvalidAuthenticatorParams")]
-    InvalidAuthenticatorParams {},
+    #[error("Authenticator error: {0}")]
+    AuthenticatorError(#[from] AuthenticatorError),
+
+    #[error("Spend limit error: {0}")]
+    SpendLimitError(#[from] SpendLimitError),
 
     #[error("QueryError: {val}")]
     QueryError { val: String },

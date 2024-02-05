@@ -1,15 +1,40 @@
-use cosmwasm_std::{DepsMut, Env, Response};
+use cosmwasm_std::{ensure, from_json, DepsMut, Env, Response};
 
-use crate::ContractError;
-use osmosis_authenticators::{AuthenticationResult, TrackRequest};
+use osmosis_authenticators::TrackRequest;
+
+use crate::{spend_limit::SpendLimitParams, state::TRANSIENT_BALANCES};
+
+use super::error::{AuthenticatorError, AuthenticatorResult};
 
 pub fn track(
     deps: DepsMut,
     _env: Env,
-    track_request: TrackRequest,
-) -> Result<Response, ContractError> {
-    deps.api
-        .debug(&format!("track_request {:?}", track_request));
+    TrackRequest {
+        account,
+        authenticator_params,
+        ..
+    }: TrackRequest,
+) -> AuthenticatorResult<Response> {
+    let account = account;
+    let params =
+        authenticator_params.ok_or_else(|| AuthenticatorError::MissingAuthenticatorParams)?;
 
-    Ok(Response::new().set_data(AuthenticationResult::Authenticated {}))
+    let params: SpendLimitParams =
+        from_json(params.as_slice()).map_err(AuthenticatorError::invalid_authenticator_params)?;
+
+    let spend_limit_key = (&account, params.subkey.as_str());
+
+    // query all the balances of the account
+    let balances = deps.querier.query_all_balances(&account)?;
+
+    // ensure there is no transient balance tracker for this account
+    let no_dirty_transient_balance = !TRANSIENT_BALANCES.has(deps.storage, spend_limit_key);
+    ensure!(
+        no_dirty_transient_balance,
+        AuthenticatorError::dirty_transient_balances(&spend_limit_key)
+    );
+
+    TRANSIENT_BALANCES.save(deps.storage, spend_limit_key, &balances)?;
+
+    Ok(Response::new())
 }

@@ -31,6 +31,7 @@ impl Spending {
         }
     }
 
+    // TODO: use &mut self instead, and ref to self
     pub fn spend(
         self,
         amount: Uint128,
@@ -82,36 +83,39 @@ impl Spending {
 
 /// Calculate the spendings from the pre-execution balances and the post-execution balances.
 /// Ignores received coins.
-pub fn spent_coins(balances_pre_exec: Vec<Coin>, balances_post_exec: Vec<Coin>) -> Vec<Coin> {
-    let balances_post_exec = to_balances_map(balances_post_exec);
+pub fn calculate_spent_coins(
+    pre_exec_balances: Vec<Coin>,
+    post_exec_balances: Vec<Coin>,
+) -> Vec<Coin> {
+    let post_exec_balances = to_balances_map(post_exec_balances);
 
     // Goes through all pre-execution balances and checks if they were spent.
     // We ignore the post-execution denoms that were not present in the pre-execution denoms
     // because that means they were received, not spent
-    balances_pre_exec
+    pre_exec_balances
         .into_iter()
-        .filter_map(|balance_pre_exec| {
-            let amount_post_exec = balances_post_exec.get(&balance_pre_exec.denom).cloned();
+        .filter_map(|pre_exec_balances| {
+            let post_exec_amount = post_exec_balances.get(&pre_exec_balances.denom).cloned();
 
-            match amount_post_exec {
+            match post_exec_amount {
                 // If the pre-execution denom is present in the post-execution balances,
                 // we compare the amount with the pre-execution amount
                 Some(amount_post_exec) => {
-                    let amount_pre_exec = balance_pre_exec.amount;
+                    let amount_pre_exec = pre_exec_balances.amount;
 
                     // If post-execution amount is less than pre-execution amount, it means it was spent
                     let is_amount_decreased = amount_post_exec < amount_pre_exec;
                     if is_amount_decreased {
                         Some(Coin::new(
                             amount_pre_exec.saturating_sub(amount_post_exec).u128(),
-                            &balance_pre_exec.denom,
+                            &pre_exec_balances.denom,
                         ))
                     } else {
                         None
                     }
                 }
                 // If the balance was not present in the post-execution balances, it means all of it was spent
-                None => Some(balance_pre_exec),
+                None => Some(pre_exec_balances),
             }
         })
         .collect()
@@ -286,12 +290,12 @@ mod tests {
         ]
     )]
 
-    pub fn test_spent_coins(
+    pub fn test_calculate_spent_coins(
         #[case] balances_before_spent: Vec<Coin>,
         #[case] balances_after_spent: Vec<Coin>,
         #[case] expected: Vec<Coin>,
     ) {
-        let deltas = spent_coins(balances_before_spent, balances_after_spent);
+        let deltas = calculate_spent_coins(balances_before_spent, balances_after_spent);
         assert_eq!(expected, deltas);
     }
 }

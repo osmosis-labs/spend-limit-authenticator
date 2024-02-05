@@ -37,7 +37,9 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
         SudoMsg::Authenticate(auth_request) => {
             authenticator_hooks::authenticate(deps, env, auth_request)
         }
-        SudoMsg::Track(track_request) => authenticator_hooks::track(deps, env, track_request),
+        SudoMsg::Track(track_request) => {
+            authenticator_hooks::track(deps, env, track_request).map_err(ContractError::from)
+        }
         SudoMsg::ConfirmExecution(confirm_execution_request) => {
             authenticator_hooks::confirm_execution(deps, env, confirm_execution_request)
         }

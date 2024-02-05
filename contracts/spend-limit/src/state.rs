@@ -27,8 +27,7 @@ pub const SPENDINGS: SpendingStorage<'_> = Map::new("spendings");
 /// and compare it with the balances after the transaction is executed.
 ///
 /// It's lifetime is only within one authenticator's lifecycle.
-pub const TRANSIENT_BALANCE_TRACKER: TransientBalanceTracker<'_> =
-    Map::new("transient_balance_tracker");
+pub const TRANSIENT_BALANCES: TransientBalanceTracker<'_> = Map::new("transient_balance_tracker");
 
 /// Contract address of the price oracle used for determining the price of the assets.
 pub const PRICE_ORACLE_CONTRACT_ADDR: Item<Addr> = Item::new("price_oracle_contract_addr");
