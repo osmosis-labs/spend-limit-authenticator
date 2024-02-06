@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use cosmwasm_std::{CoinsError, StdError};
 
-use crate::{authenticator_hooks::AuthenticatorError, spend_limit::SpendLimitError};
+use crate::{authenticator::AuthenticatorError, spend_limit::SpendLimitError};
 
 /// Never is a placeholder to ensure we don't return any errors
 #[derive(Error, Debug)]

@@ -6,7 +6,7 @@ use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
 use crate::state::{SPENDINGS, TRANSIENT_BALANCES};
 use crate::ContractError;
 
-use super::AuthenticatorError;
+use crate::authenticator::AuthenticatorError;
 
 pub fn confirm_execution(
     deps: DepsMut,
@@ -32,8 +32,8 @@ pub fn confirm_execution(
     // query all the balances of the account
     let post_exec_balances = deps.querier.query_all_balances(&account)?;
 
-    let pre_exec_balances = pre_exec_balances.try_into().unwrap();
-    let post_exec_balances = post_exec_balances.try_into().unwrap();
+    let pre_exec_balances = pre_exec_balances.try_into()?;
+    let post_exec_balances = post_exec_balances.try_into()?;
     let spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;

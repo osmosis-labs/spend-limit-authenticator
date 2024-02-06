@@ -1,4 +1,4 @@
-pub mod authenticator_hooks;
+pub mod authenticator;
 pub mod spend_limit;
 pub mod twap;
 

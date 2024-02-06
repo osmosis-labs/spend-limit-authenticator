@@ -4,7 +4,7 @@ use osmosis_authenticators::TrackRequest;
 
 use crate::{spend_limit::SpendLimitParams, state::TRANSIENT_BALANCES};
 
-use super::error::{AuthenticatorError, AuthenticatorResult};
+use crate::authenticator::error::{AuthenticatorError, AuthenticatorResult};
 
 pub fn track(
     deps: DepsMut,

@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 
-use crate::authenticator_hooks;
+use crate::authenticator;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendLimitDataResponse, SudoMsg};
 use crate::state::{DEPRECATED_SPEND_LIMITS, PRICE_ORACLE_CONTRACT_ADDR};
 use crate::ContractError;
@@ -34,14 +34,12 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
-        SudoMsg::Authenticate(auth_request) => {
-            authenticator_hooks::authenticate(deps, env, auth_request)
-        }
+        SudoMsg::Authenticate(auth_request) => authenticator::authenticate(deps, env, auth_request),
         SudoMsg::Track(track_request) => {
-            authenticator_hooks::track(deps, env, track_request).map_err(ContractError::from)
+            authenticator::track(deps, env, track_request).map_err(ContractError::from)
         }
         SudoMsg::ConfirmExecution(confirm_execution_request) => {
-            authenticator_hooks::confirm_execution(deps, env, confirm_execution_request)
+            authenticator::confirm_execution(deps, env, confirm_execution_request)
         }
     }
 }

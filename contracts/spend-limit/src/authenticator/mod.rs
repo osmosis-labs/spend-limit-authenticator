@@ -1,7 +1,7 @@
-mod authenticate;
-mod confirm_execution;
 mod error;
-mod track;
+mod handler;
+
+use handler::*;
 
 pub use {
     authenticate::authenticate, confirm_execution::confirm_execution, error::AuthenticatorError,
