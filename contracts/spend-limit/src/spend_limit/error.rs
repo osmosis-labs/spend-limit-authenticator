@@ -1,5 +1,5 @@
 use super::period::PeriodError;
-use cosmwasm_std::{CoinsError, OverflowError, Uint128};
+use cosmwasm_std::{OverflowError, Uint128};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -12,9 +12,6 @@ pub enum SpendLimitError {
 
     #[error("Accumulating spent value error: {0}")]
     AccumulatingSpentValueError(#[from] OverflowError),
-
-    #[error("Spent coins calculation error: {0}")]
-    SpentCoinsCalculationError(#[from] CoinsError),
 
     #[error("Overspent: remaining qouta {remaining}, requested {requested}")]
     Overspent {

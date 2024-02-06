@@ -20,9 +20,17 @@ pub enum SudoMsg {
 pub enum QueryMsg {
     #[returns(SpendLimitDataResponse)]
     GetSpendLimitData { account: Addr },
+
+    #[returns(PriceOracleContractAddrResponse)]
+    PriceOracleContractAddr {},
 }
 
 #[cw_serde]
 pub struct SpendLimitDataResponse {
     pub spend_limit_data: DeprecatedSpendLimit,
+}
+
+#[cw_serde]
+pub struct PriceOracleContractAddrResponse {
+    pub price_oracle_contract_addr: Addr,
 }

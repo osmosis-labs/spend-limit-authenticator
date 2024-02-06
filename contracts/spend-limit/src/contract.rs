@@ -52,10 +52,17 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::GetSpendLimitData { account } => {
             to_json_binary(&query_spend_limit(deps, account)?)
         }
+        QueryMsg::PriceOracleContractAddr {} => {
+            to_json_binary(&query_price_oracle_contract_addr(deps)?)
+        }
     }
 }
 
 pub fn query_spend_limit(deps: Deps, account: Addr) -> StdResult<SpendLimitDataResponse> {
     let spend_limit_data = DEPRECATED_SPEND_LIMITS.load(deps.storage, account.to_string())?;
     Ok(SpendLimitDataResponse { spend_limit_data })
+}
+
+pub fn query_price_oracle_contract_addr(deps: Deps) -> StdResult<Addr> {
+    PRICE_ORACLE_CONTRACT_ADDR.load(deps.storage)
 }

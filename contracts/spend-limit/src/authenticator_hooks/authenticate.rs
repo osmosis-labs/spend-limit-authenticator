@@ -16,5 +16,5 @@ pub fn authenticate(
     _env: Env,
     _auth_request: AuthenticationRequest,
 ) -> Result<Response, ContractError> {
-    Ok(Response::new().set_data(AuthenticationResult::NotAuthenticated {}))
+    Ok(Response::new().set_data(AuthenticationResult::Authenticated))
 }

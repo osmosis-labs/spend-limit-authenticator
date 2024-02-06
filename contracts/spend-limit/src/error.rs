@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use cosmwasm_std::StdError;
+use cosmwasm_std::{CoinsError, StdError};
 
 use crate::{authenticator_hooks::AuthenticatorError, spend_limit::SpendLimitError};
 
@@ -12,6 +12,9 @@ pub enum Never {}
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
+
+    #[error("{0}")]
+    CoinsError(#[from] CoinsError),
 
     #[error("Unauthorized")]
     Unauthorized {},

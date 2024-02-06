@@ -27,8 +27,8 @@ use cw_storage_plus::Map;
 
 pub type SpendingStorage<'a> = Map<'a, SpendingKey<'a>, Spending>;
 
-/// TransientBalanceTracker is a map of spending keys to the coins spent.
-pub type TransientBalanceTracker<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
+/// [`TransientBalance`] is a map of spending keys to the coins spent.
+pub type TransientBalance<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
 
 /// SpendingKey is a key for the spending storage.
 /// It is a tuple of (account, subkey) which
