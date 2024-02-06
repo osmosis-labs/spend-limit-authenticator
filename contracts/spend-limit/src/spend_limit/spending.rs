@@ -29,15 +29,14 @@ impl Spending {
         }
     }
 
-    // TODO: use &mut self instead, and ref to self
     pub fn spend(
-        self,
+        &mut self,
         amount: Uint128,
         conversion_rate: impl Fraction<Uint128>,
         limit: Uint128,
         period: &Period,
         at: Timestamp,
-    ) -> SpendLimitResult<Self> {
+    ) -> SpendLimitResult<&mut Self> {
         let spending_value =
             amount.multiply_ratio(conversion_rate.numerator(), conversion_rate.denominator());
 
@@ -54,11 +53,10 @@ impl Spending {
             }
         );
 
-        Ok(Self {
-            value_spent_in_period,
-            last_spent_at: at,
-            ..self
-        })
+        self.value_spent_in_period = value_spent_in_period;
+        self.last_spent_at = at;
+
+        Ok(self)
     }
 
     /// Get the value spent in the period.
@@ -114,7 +112,7 @@ mod tests {
     #[test]
     fn test_spending_flow() {
         // create new spending tracker
-        let spending = Spending::default();
+        let mut spending = Spending::default();
         let period = Period::Day;
 
         assert_eq!(spending.value_spent_in_period, Uint128::zero());
@@ -125,7 +123,7 @@ mod tests {
         let at = to_timestamp(datetime!(2024-01-01 00:00:00 UTC));
         let conversion_rate = Decimal::one();
 
-        let spending = spending
+        spending
             .spend(
                 Uint128::from(50_000_000u128),
                 conversion_rate,
@@ -192,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_spending_with_value_conversion() {
-        let spending = Spending::default();
+        let mut spending = Spending::default();
         let conversion_rate = Decimal::from_ratio(1u128, 200_000u128);
         let period = Period::Month;
 
@@ -200,7 +198,7 @@ mod tests {
         let limit = Uint128::from(100_000_000u128);
         let at = to_timestamp(datetime!(2024-01-01 00:00:00 UTC));
 
-        let spending = spending
+        spending
             .spend(
                 Uint128::from(50_000_000u128 * 200_000u128),
                 conversion_rate,

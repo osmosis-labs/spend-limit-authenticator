@@ -42,7 +42,7 @@ pub fn confirm_execution(
         // TODO: query conversion rate
         let conversion_rate = Decimal::one();
 
-        spending = spending.spend(
+        spending.spend(
             coin.amount,
             conversion_rate,
             params.limit.amount,
