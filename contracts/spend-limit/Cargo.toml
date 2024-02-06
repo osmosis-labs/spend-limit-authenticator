@@ -14,7 +14,7 @@ cw-storage-plus = "1.1.0"
 cw2 = "1.1.2"
 itertools = "0.12.1"
 osmosis-authenticators = "0.22.0-alpha.5"
-osmosis-std = "0.20.1"
+osmosis-std = {git = " https://github.com/osmosis-labs/osmosis-rust", branch = "authenticator"}
 rstest = "0.18.2"
 schemars = "0.8.12"
 serde = "1.0.180"
@@ -31,6 +31,7 @@ optimize = """docker run --rm -v "$(pwd)":/code \
 """
 
 [dev-dependencies]
+mock-cosmwasm-contract = "0.1.2"
+# osmosis-test-tube = {git = " https://github.com/osmosis-labs/test-tube", branch = "authenticator"}
+osmosis-test-tube = {path = "../../../test-tube/packages/osmosis-test-tube"}
 rstest = "0.18.2"
-#osmosis-test-tube = "20.1.2"
-#sylvia = { version = "0.9.2", features = ["mt"] }

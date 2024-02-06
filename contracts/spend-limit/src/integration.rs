@@ -1,161 +1,124 @@
-// TODO: integrate latest authenticator logic in to osmosis-test-tube and used to test it here
-#[cfg(test)]
-mod tests {
-    use cosmwasm_std::{Addr, Binary};
-    use osmosis_authenticators::{
-        Any, AuthenticationRequest, SignModeTxData, SignatureData, TxData,
+#![cfg(test)]
+use std::path::PathBuf;
+
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{to_json_binary, Coin};
+use osmosis_std::types::osmosis::authenticator::{
+    MsgAddAuthenticator, MsgAddAuthenticatorResponse,
+};
+use osmosis_test_tube::{Account, Module, OsmosisTestApp, Runner, Wasm};
+
+use crate::{
+    msg::InstantiateMsg,
+    spend_limit::{Period, SpendLimitParams},
+};
+
+#[cw_serde]
+struct CosmwasmAuthenticatorData {
+    contract: String,
+    params: Vec<u8>,
+}
+
+#[test]
+fn test_integration() {
+    let app = OsmosisTestApp::new();
+    let accs = app
+        .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
+        .unwrap();
+
+    // Add signature verification authenticator
+    let MsgAddAuthenticatorResponse { success } = app
+        .execute(
+            MsgAddAuthenticator {
+                sender: accs[0].address(),
+                r#type: "SignatureVerificationAuthenticator".to_string(),
+                data: accs[0].public_key().to_bytes(),
+            },
+            MsgAddAuthenticator::TYPE_URL,
+            &accs[0],
+        )
+        .unwrap()
+        .data;
+
+    assert!(success);
+
+    let wasm = Wasm::new(&app);
+    // Store code and initialize mock price oracle contract
+    let code_id = wasm
+        .store_code(mock_cosmwasm_contract::WASM_BYTES, None, &accs[0])
+        .unwrap()
+        .data
+        .code_id;
+
+    let mock_price_oracle_contract_address = wasm
+        .instantiate(
+            code_id,
+            &mock_cosmwasm_contract::InstantiateMsg {},
+            None,
+            Some("price_oracle"),
+            &[],
+            &accs[0],
+        )
+        .unwrap()
+        .data
+        .address;
+
+    // Store code and initialize spend limit contract
+    let wasm_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release")
+        .join("spend_limit.wasm");
+
+    let wasm_bytes = std::fs::read(wasm_path).unwrap();
+
+    let code_id = wasm
+        .store_code(&wasm_bytes, None, &accs[0])
+        .unwrap()
+        .data
+        .code_id;
+
+    let contract_addr = wasm
+        .instantiate(
+            code_id,
+            &InstantiateMsg {
+                price_oracle_contract_addr: mock_price_oracle_contract_address,
+            },
+            None,
+            Some("spend_limit_authenticator"),
+            &[],
+            &accs[0],
+        )
+        .unwrap()
+        .data
+        .address;
+
+    // Add spend limit authenticator
+    let data = CosmwasmAuthenticatorData {
+        contract: contract_addr,
+        params: to_json_binary(&SpendLimitParams {
+            subkey: "default".to_string(),
+            limit: Coin::new(1_000_000_000_000_000, "uosmo"),
+            reset_period: Period::Day,
+        })
+        .unwrap()
+        .to_vec(),
     };
 
-    use cosmwasm_std::Coin;
-    use osmosis_test_tube::{Account, OsmosisTestApp, SigningAccount};
-    use osmosis_test_tube::{Gamm, Module, Wasm};
-    use serde::Serialize;
-
-    use crate::msg::{InstantiateMsg, SudoMsg};
-
-    #[test]
-    fn test_integration() {
-        let app = OsmosisTestApp::new();
-        let gamm = Gamm::new(&app);
-        let wasm = Wasm::new(&app);
-
-        // setup owner account
-        let initial_balance = [
-            Coin::new(400, "uosmo"),
-            // ATOM
-            Coin::new(
-                300,
-                "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
-            ),
-            // USDC
-            Coin::new(
-                200,
-                "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4",
-            ),
-            Coin::new(100, "memecoin"),
-        ];
-        let owner = app.init_account(&initial_balance).unwrap();
-
-        // create pools
-        gamm.create_basic_pool(
-            &[
-                Coin::new(400, "uosmo"),
-                // USDC
-                Coin::new(
-                    200,
-                    "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4",
-                ),
-            ],
-            &owner,
+    let MsgAddAuthenticatorResponse { success } = app
+        .execute(
+            MsgAddAuthenticator {
+                sender: accs[0].address(),
+                r#type: "CosmwasmAuthenticatorV1".to_string(),
+                data: to_json_binary(&data).unwrap().to_vec(),
+            },
+            MsgAddAuthenticator::TYPE_URL,
+            &accs[0],
         )
-        .unwrap();
-        gamm.create_basic_pool(
-            &[
-                // ATOM
-                Coin::new(
-                    300,
-                    "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
-                ),
-                // USDC
-                Coin::new(
-                    200,
-                    "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4",
-                ),
-            ],
-            &owner,
-        )
-        .unwrap();
-        gamm.create_basic_pool(
-            &[
-                Coin::new(400, "uosmo"),
-                // ATOM
-                Coin::new(
-                    300,
-                    "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
-                ),
-            ],
-            &owner,
-        )
-        .unwrap();
+        .unwrap()
+        .data;
 
-        let wasm_byte_code =
-            std::fs::read("../../target/wasm32-unknown-unknown/release/spend_limit.wasm").unwrap();
-        println!("Deploying the spend_limit contract");
-        let (_, spendlimit_address) =
-            deploy_contract(&wasm, &owner, wasm_byte_code, &InstantiateMsg {});
-        println!("{}", spendlimit_address);
-
-        let auth_request = AuthenticationRequest {
-            account: Addr::unchecked("mock_account"),
-            msg: Any {
-                type_url: "cosmwasm/std/Msg".to_string(),
-                value: Binary::from(b"mock_msg_value".to_vec()),
-            },
-            signature: Binary::from(b"mock_signature".to_vec()),
-            sign_mode_tx_data: SignModeTxData {
-                sign_mode_direct: Binary::from(b"mock_sign_mode_direct".to_vec()),
-                sign_mode_textual: Some("mock_sign_mode_textual".to_string()),
-            },
-            tx_data: TxData {
-                chain_id: "mock_chain_id".to_string(),
-                account_number: 1,
-                sequence: 1,
-                timeout_height: 100,
-                msgs: vec![Any {
-                    type_url: "cosmwasm/std/Msg".to_string(),
-                    value: Binary::from(b"mock_msg_value".to_vec()),
-                }],
-                memo: "mock_memo".to_string(),
-            },
-            signature_data: SignatureData {
-                signers: vec![Addr::unchecked("mock_signer")],
-                signatures: vec![Binary::from(b"mock_signature".to_vec())],
-            },
-            simulate: false,
-            authenticator_params: Some(Binary::from(
-                br#"{ "id": "100", "duration": 1000, "limit": 1000 }"#.to_vec(),
-            )),
-        };
-
-        // XXX: osmosis_test_tube cannot handle sudo messages
-        // TODO: update osmosis_test_tube and add sudo to the API, then finish these test
-        // let msg = SudoMsg::Authenticate(auth_request.clone());
-        // let result = wasm
-        //     .execute(
-        //         &spendlimit_address,
-        //         &msg,
-        //         &[Coin::new(2500, "uosmo")],
-        //         &owner,
-        //     )
-        //     .expect("Sudo call failed");
-
-        // dbg!(result);
-        // println!("Authentication result: {:?}", auth_result);
-    }
-
-    fn deploy_contract<M>(
-        wasm: &Wasm<OsmosisTestApp>,
-        owner: &SigningAccount,
-        code: Vec<u8>,
-        instantiate_msg: &M,
-    ) -> (u64, String)
-    where
-        M: ?Sized + Serialize,
-    {
-        let code_id = wasm.store_code(&code, None, owner).unwrap().data.code_id;
-
-        let contract_address = wasm
-            .instantiate(
-                code_id,
-                instantiate_msg,
-                Some(&owner.address()),
-                None,
-                &[],
-                owner,
-            )
-            .unwrap()
-            .data
-            .address;
-        (code_id, contract_address)
-    }
+    assert!(success);
 }

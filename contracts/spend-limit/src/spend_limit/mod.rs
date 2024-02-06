@@ -8,6 +8,7 @@ use cosmwasm_std::Coin;
 
 pub use error::SpendLimitError;
 pub use params::SpendLimitParams;
+pub use period::Period;
 pub use spending::{calculate_spent_coins, Spending};
 
 #[cw_serde]

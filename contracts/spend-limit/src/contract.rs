@@ -34,6 +34,7 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
+        SudoMsg::OnAuthenticatorAdded(_) => Ok(Response::default()),
         SudoMsg::Authenticate(auth_request) => authenticator::authenticate(deps, env, auth_request),
         SudoMsg::Track(track_request) => {
             authenticator::track(deps, env, track_request).map_err(ContractError::from)

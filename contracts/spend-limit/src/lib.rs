@@ -7,7 +7,7 @@ pub mod error;
 pub mod msg;
 pub mod state;
 
-//#[cfg(any(test, feature = "tests"))]
-//pub mod integration;
+#[cfg(test)]
+pub mod integration;
 
 pub use crate::error::ContractError;
