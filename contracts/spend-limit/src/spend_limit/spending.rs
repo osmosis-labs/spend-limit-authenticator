@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure, Coin, Fraction, Timestamp, Uint128};
+use cosmwasm_std::{ensure, Coin, Coins, Fraction, Timestamp, Uint128};
 
 use crate::spend_limit::error::SpendLimitError;
 
@@ -84,48 +82,24 @@ impl Spending {
 /// Calculate the spendings from the pre-execution balances and the post-execution balances.
 /// Ignores received coins.
 pub fn calculate_spent_coins(
-    pre_exec_balances: Vec<Coin>,
-    post_exec_balances: Vec<Coin>,
-) -> Vec<Coin> {
-    let post_exec_balances = to_balances_map(post_exec_balances);
+    pre_exec_balances: Coins,
+    post_exec_balances: Coins,
+) -> Result<Coins, SpendLimitError> {
+    let mut spent_coins = Coins::default();
 
     // Goes through all pre-execution balances and checks if they were spent.
     // We ignore the post-execution denoms that were not present in the pre-execution denoms
     // because that means they were received, not spent
-    pre_exec_balances
-        .into_iter()
-        .filter_map(|pre_exec_balances| {
-            let post_exec_amount = post_exec_balances.get(&pre_exec_balances.denom).cloned();
+    for pre_exec_balance in pre_exec_balances.into_iter() {
+        let denom = pre_exec_balance.denom;
+        let pre_exec_amount = pre_exec_balance.amount;
+        let post_exec_amount = post_exec_balances.amount_of(&denom);
 
-            match post_exec_amount {
-                // If the pre-execution denom is present in the post-execution balances,
-                // we compare the amount with the pre-execution amount
-                Some(amount_post_exec) => {
-                    let amount_pre_exec = pre_exec_balances.amount;
+        let spent_amount = pre_exec_amount.saturating_sub(post_exec_amount).u128();
+        spent_coins.add(Coin::new(spent_amount, &denom))?;
+    }
 
-                    // If post-execution amount is less than pre-execution amount, it means it was spent
-                    let is_amount_decreased = amount_post_exec < amount_pre_exec;
-                    if is_amount_decreased {
-                        Some(Coin::new(
-                            amount_pre_exec.saturating_sub(amount_post_exec).u128(),
-                            &pre_exec_balances.denom,
-                        ))
-                    } else {
-                        None
-                    }
-                }
-                // If the balance was not present in the post-execution balances, it means all of it was spent
-                None => Some(pre_exec_balances),
-            }
-        })
-        .collect()
-}
-
-fn to_balances_map(balances: Vec<Coin>) -> HashMap<String, Uint128> {
-    balances
-        .into_iter()
-        .map(|coin| (coin.denom, coin.amount))
-        .collect()
+    Ok(spent_coins)
 }
 
 #[cfg(test)]
@@ -295,7 +269,10 @@ mod tests {
         #[case] balances_after_spent: Vec<Coin>,
         #[case] expected: Vec<Coin>,
     ) {
-        let deltas = calculate_spent_coins(balances_before_spent, balances_after_spent);
+        let balances_before_spent = Coins::try_from(balances_before_spent).unwrap();
+        let balances_after_spent = Coins::try_from(balances_after_spent).unwrap();
+        let deltas = calculate_spent_coins(balances_before_spent, balances_after_spent).unwrap();
+        let expected = Coins::try_from(expected).unwrap();
         assert_eq!(expected, deltas);
     }
 }
