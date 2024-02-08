@@ -16,8 +16,7 @@ pub fn track(
     }: TrackRequest,
 ) -> AuthenticatorResult<Response> {
     let account = account;
-    let params =
-        authenticator_params.ok_or_else(|| AuthenticatorError::MissingAuthenticatorParams)?;
+    let params = authenticator_params.ok_or(AuthenticatorError::MissingAuthenticatorParams)?;
 
     let params: SpendLimitParams =
         from_json(params.as_slice()).map_err(AuthenticatorError::invalid_authenticator_params)?;

@@ -1,9 +1,9 @@
-use cosmwasm_std::{ensure, from_json, DepsMut, Env, Response};
+use cosmwasm_std::{ensure, DepsMut, Env, Response};
 use osmosis_authenticators::OnAuthenticatorAddedRequest;
 
 use crate::{
-    authenticator::AuthenticatorError,
-    spend_limit::{SpendLimitParams, Spending},
+    authenticator::{handler::validate_and_parse_params, AuthenticatorError},
+    spend_limit::Spending,
     state::SPENDINGS,
 };
 
@@ -15,13 +15,7 @@ pub fn on_authenticator_added(
         authenticator_params,
     }: OnAuthenticatorAddedRequest,
 ) -> Result<Response, AuthenticatorError> {
-    // Make sure the authenticator_params are present
-    let authenticator_params =
-        authenticator_params.ok_or_else(|| AuthenticatorError::MissingAuthenticatorParams)?;
-
-    // Make sure the authenticator_params are parsed correctly
-    let authenticator_params: SpendLimitParams = from_json(authenticator_params.as_slice())
-        .map_err(AuthenticatorError::invalid_authenticator_params)?;
+    let authenticator_params = validate_and_parse_params(authenticator_params)?;
 
     // Make sure if denom has any supply at all
     let supply = deps
@@ -52,7 +46,7 @@ pub fn on_authenticator_added(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spend_limit::Period;
+    use crate::spend_limit::{Period, SpendLimitParams};
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Coin, StdError,

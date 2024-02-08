@@ -1,4 +1,3 @@
-use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::{AuthenticationRequest, AuthenticationResult};
 
