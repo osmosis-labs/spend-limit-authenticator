@@ -6,8 +6,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 
 use crate::authenticator;
-use crate::msg::{InstantiateMsg, QueryMsg, SpendLimitDataResponse, SudoMsg};
-use crate::state::{DEPRECATED_SPEND_LIMITS, PRICE_ORACLE_CONTRACT_ADDR};
+use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SudoMsg};
+use crate::state::{PRICE_ORACLE_CONTRACT_ADDR, SPENDINGS};
 use crate::ContractError;
 
 const CONTRACT_NAME: &str = "crates.io:spend-limit";
@@ -48,8 +48,8 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetSpendLimitData { account } => {
-            to_json_binary(&query_spend_limit(deps, account)?)
+        QueryMsg::Spending { account, subkey } => {
+            to_json_binary(&query_spending(deps, account, subkey)?)
         }
         QueryMsg::PriceOracleContractAddr {} => {
             to_json_binary(&query_price_oracle_contract_addr(deps)?)
@@ -57,9 +57,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
-pub fn query_spend_limit(deps: Deps, account: Addr) -> StdResult<SpendLimitDataResponse> {
-    let spend_limit_data = DEPRECATED_SPEND_LIMITS.load(deps.storage, account.to_string())?;
-    Ok(SpendLimitDataResponse { spend_limit_data })
+pub fn query_spending(deps: Deps, account: Addr, subkey: String) -> StdResult<SpendingResponse> {
+    let spending = SPENDINGS.load(deps.storage, (&account, subkey.as_str()))?;
+    Ok(SpendingResponse { spending })
 }
 
 pub fn query_price_oracle_contract_addr(deps: Deps) -> StdResult<Addr> {

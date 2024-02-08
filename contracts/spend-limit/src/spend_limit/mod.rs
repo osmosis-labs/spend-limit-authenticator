@@ -2,26 +2,12 @@ mod error;
 mod params;
 mod period;
 mod spending;
-
-use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Coin;
 
 pub use error::SpendLimitError;
 pub use params::SpendLimitParams;
 pub use period::Period;
 pub use spending::{calculate_spent_coins, Spending};
-
-#[cw_serde]
-pub struct DeprecatedSpendLimit {
-    pub id: String,
-    pub denom: String,
-    pub balance: Vec<Coin>,
-    pub amount_left: u128,
-    pub block_of_last_tx: u64,
-    pub number_of_blocks_active: u64,
-}
-
-// -------------------------------------------
 
 use cosmwasm_std::Addr;
 use cw_storage_plus::Map;

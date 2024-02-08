@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Addr;
 
-use crate::spend_limit::DeprecatedSpendLimit;
+use crate::spend_limit::Spending;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -19,16 +19,16 @@ pub enum SudoMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    #[returns(SpendLimitDataResponse)]
-    GetSpendLimitData { account: Addr },
+    #[returns(SpendingResponse)]
+    Spending { account: Addr, subkey: String },
 
     #[returns(PriceOracleContractAddrResponse)]
     PriceOracleContractAddr {},
 }
 
 #[cw_serde]
-pub struct SpendLimitDataResponse {
-    pub spend_limit_data: DeprecatedSpendLimit,
+pub struct SpendingResponse {
+    pub spending: Spending,
 }
 
 #[cw_serde]

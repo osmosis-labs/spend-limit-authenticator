@@ -3,13 +3,7 @@ use cosmwasm_std::Addr;
 use cw_storage_plus::{Item, Map};
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
-use crate::spend_limit::{DeprecatedSpendLimit, PreExecBalance, SpendingStorage};
-
-pub const USDC_DENOM: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
-pub const TRACKED_DENOMS_IN_MEMORY: &str = "TBD";
-
-pub const DEPRECATED_SPEND_LIMITS: Map<String, DeprecatedSpendLimit> = Map::new("sls");
-pub const TRACKED_DENOMS: Map<Denom, TrackedDenom> = Map::new("tds");
+use crate::spend_limit::{PreExecBalance, SpendingStorage};
 
 #[cw_serde]
 pub struct TrackedDenom {
