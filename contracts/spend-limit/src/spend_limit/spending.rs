@@ -40,20 +40,19 @@ impl Spending {
         let spending_value =
             amount.multiply_ratio(conversion_rate.numerator(), conversion_rate.denominator());
 
-        let value_spent_in_period = self
-            .get_or_reset_value_spent(period, at)?
-            .checked_add(spending_value)?;
+        let value_spent_in_period = self.get_or_reset_value_spent(period, at)?;
+        let updated_value_spent_in_period = value_spent_in_period.checked_add(spending_value)?;
 
         // ensure that the value spent in the period is not over the limit
         ensure!(
-            value_spent_in_period <= limit,
+            updated_value_spent_in_period <= limit,
             SpendLimitError::Overspent {
                 remaining: limit.saturating_sub(value_spent_in_period),
                 requested: spending_value,
             }
         );
 
-        self.value_spent_in_period = value_spent_in_period;
+        self.value_spent_in_period = updated_value_spent_in_period;
         self.last_spent_at = at;
 
         Ok(self)
@@ -155,7 +154,7 @@ mod tests {
         assert_eq!(
             err,
             SpendLimitError::Overspent {
-                remaining: Uint128::zero(),
+                remaining: Uint128::from(50_000_000u128),
                 requested: Uint128::from(50_000_001u128),
             }
         );

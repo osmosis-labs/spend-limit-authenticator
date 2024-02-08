@@ -21,4 +21,13 @@ pub enum SpendLimitError {
     },
 }
 
+impl SpendLimitError {
+    pub fn overspent(remaining: u128, requested: u128) -> Self {
+        Self::Overspent {
+            remaining: Uint128::from(remaining),
+            requested: Uint128::from(requested),
+        }
+    }
+}
+
 pub type SpendLimitResult<T> = Result<T, SpendLimitError>;
