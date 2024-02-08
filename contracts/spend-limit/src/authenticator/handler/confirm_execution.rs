@@ -3,7 +3,7 @@ use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
 
 use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
 
-use crate::state::{SPENDINGS, TRANSIENT_BALANCES};
+use crate::state::{PRE_EXEC_BALANCES, SPENDINGS};
 use crate::ContractError;
 
 use crate::authenticator::AuthenticatorError;
@@ -25,8 +25,8 @@ pub fn confirm_execution(
 
     let spend_limit_key = (&account, params.subkey.as_str());
 
-    // get the transient balance for this key
-    let pre_exec_balances = TRANSIENT_BALANCES.load(deps.storage, spend_limit_key)?;
+    // get the pre_exec balance for this key
+    let pre_exec_balances = PRE_EXEC_BALANCES.load(deps.storage, spend_limit_key)?;
 
     // query all the balances of the account
     let post_exec_balances = deps.querier.query_all_balances(&account)?;

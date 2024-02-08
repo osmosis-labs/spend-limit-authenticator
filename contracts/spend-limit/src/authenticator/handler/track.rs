@@ -1,8 +1,9 @@
-use cosmwasm_std::{ensure, from_json, DepsMut, Env, Response};
+use cosmwasm_std::{ensure, Addr, DepsMut, Env, Response};
 
 use osmosis_authenticators::TrackRequest;
 
-use crate::{spend_limit::SpendLimitParams, state::TRANSIENT_BALANCES};
+use crate::authenticator::handler::validate_and_parse_params;
+use crate::{spend_limit::SpendLimitParams, state::PRE_EXEC_BALANCES};
 
 use crate::authenticator::error::{AuthenticatorError, AuthenticatorResult};
 
@@ -15,25 +16,97 @@ pub fn track(
         ..
     }: TrackRequest,
 ) -> AuthenticatorResult<Response> {
-    let account = account;
-    let params = authenticator_params.ok_or(AuthenticatorError::MissingAuthenticatorParams)?;
-
-    let params: SpendLimitParams =
-        from_json(params.as_slice()).map_err(AuthenticatorError::invalid_authenticator_params)?;
-
-    let spend_limit_key = (&account, params.subkey.as_str());
-
-    // query all the balances of the account
-    let balances = deps.querier.query_all_balances(&account)?;
-
-    // ensure there is no transient balance tracker for this account
-    let no_dirty_transient_balance = !TRANSIENT_BALANCES.has(deps.storage, spend_limit_key);
-    ensure!(
-        no_dirty_transient_balance,
-        AuthenticatorError::dirty_transient_balances(&spend_limit_key)
-    );
-
-    TRANSIENT_BALANCES.save(deps.storage, spend_limit_key, &balances)?;
+    let SpendLimitParams { subkey, .. } = validate_and_parse_params(authenticator_params)?;
+    update_pre_exec_balance(deps, &account, &subkey)?;
 
     Ok(Response::new())
+}
+
+fn update_pre_exec_balance(deps: DepsMut, account: &Addr, subkey: &str) -> AuthenticatorResult<()> {
+    // query all the balances of the account
+    let balances = deps.querier.query_all_balances(account)?;
+
+    // make sure the pre-exec balance is cleaned up
+    let key = (account, subkey);
+    let no_dirty_pre_exec_balance = !PRE_EXEC_BALANCES.has(deps.storage, key);
+    ensure!(
+        no_dirty_pre_exec_balance,
+        AuthenticatorError::dirty_pre_exec_balances(&key)
+    );
+
+    // save the updated pre_exec balance
+    PRE_EXEC_BALANCES.save(deps.storage, key, &balances)?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::spend_limit::{Period, SpendLimitParams};
+    use cosmwasm_std::{
+        testing::{mock_dependencies_with_balances, mock_env},
+        to_json_binary, Addr, Binary, Coin,
+    };
+    use osmosis_authenticators::TrackRequest;
+
+    #[test]
+    fn test_track_success() {
+        let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
+
+        let track_request = TrackRequest {
+            account: Addr::unchecked("addr"),
+            authenticator_params: Some(
+                to_json_binary(&SpendLimitParams {
+                    subkey: "subkey1".to_string(),
+                    limit: Coin::new(500, "usdc"),
+                    reset_period: Period::Day,
+                })
+                .unwrap(),
+            ),
+            msg: osmosis_authenticators::Any {
+                type_url: "".to_string(),
+                value: Binary::default(),
+            },
+        };
+
+        let response = track(deps.as_mut(), mock_env(), track_request).unwrap();
+        assert_eq!(response, Response::new());
+
+        // Verify that the pre_exec_balance is updated
+        let key = (&Addr::unchecked("addr"), "subkey1");
+        let pre_exec_balance = PRE_EXEC_BALANCES.load(deps.as_ref().storage, key).unwrap();
+        assert_eq!(pre_exec_balance, vec![Coin::new(1000, "usdc")]);
+    }
+
+    #[test]
+    fn test_track_failure_dirty_pre_exec_balance() {
+        let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
+
+        // Simulate existing pre-exec balance to trigger failure
+        let key = (&Addr::unchecked("addr"), "subkey1");
+        PRE_EXEC_BALANCES
+            .save(deps.as_mut().storage, key, &vec![Coin::new(500, "usdc")])
+            .unwrap();
+
+        let track_request = TrackRequest {
+            account: Addr::unchecked("addr"),
+            authenticator_params: Some(
+                to_json_binary(&SpendLimitParams {
+                    subkey: "subkey1".to_string(),
+                    limit: Coin::new(500, "usdc"),
+                    reset_period: Period::Day,
+                })
+                .unwrap(),
+            ),
+            msg: osmosis_authenticators::Any {
+                type_url: "".to_string(),
+                value: Binary::default(),
+            },
+        };
+
+        let err = track(deps.as_mut(), mock_env(), track_request).unwrap_err();
+        assert_eq!(err, AuthenticatorError::dirty_pre_exec_balances(&key));
+    }
 }

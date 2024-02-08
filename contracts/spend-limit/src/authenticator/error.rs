@@ -23,8 +23,8 @@ pub enum AuthenticatorError {
     #[error("Authenticator already exists for account {account} and subkey {subkey}")]
     AuthenticatorAlreadyExists { account: Addr, subkey: String },
 
-    #[error("Transient balances already exists for this key: {key}")]
-    DirtyTransientBalances { key: String },
+    #[error("PreExec balances already exists for this key: {key}")]
+    DirtyPreExecBalances { key: String },
 }
 
 impl AuthenticatorError {
@@ -32,8 +32,8 @@ impl AuthenticatorError {
         Self::InvalidAuthenticatorParams { src: src.into() }
     }
 
-    pub fn dirty_transient_balances(key: &SpendingKey) -> Self {
-        Self::DirtyTransientBalances {
+    pub fn dirty_pre_exec_balances(key: &SpendingKey) -> Self {
+        Self::DirtyPreExecBalances {
             key: format!("{:?}", key),
         }
     }
