@@ -22,6 +22,9 @@ pub enum QueryMsg {
     #[returns(SpendingResponse)]
     Spending { account: Addr, subkey: String },
 
+    #[returns(SpendingsByAccountResponse)]
+    SpendingsByAccount { account: Addr },
+
     #[returns(PriceOracleContractAddrResponse)]
     PriceOracleContractAddr {},
 }
@@ -29,6 +32,11 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct SpendingResponse {
     pub spending: Spending,
+}
+
+#[cw_serde]
+pub struct SpendingsByAccountResponse {
+    pub spendings: Vec<(String, Spending)>,
 }
 
 #[cw_serde]

@@ -1,12 +1,14 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError,
+    StdResult,
 };
 use cw2::set_contract_version;
 
 use crate::authenticator;
-use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SudoMsg};
+use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
+use crate::spend_limit::Spending;
 use crate::state::{PRICE_ORACLE_CONTRACT_ADDR, SPENDINGS};
 use crate::ContractError;
 
@@ -51,6 +53,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Spending { account, subkey } => {
             to_json_binary(&query_spending(deps, account, subkey)?)
         }
+        QueryMsg::SpendingsByAccount { account } => {
+            to_json_binary(&query_spendings_by_account(deps, account)?)
+        }
         QueryMsg::PriceOracleContractAddr {} => {
             to_json_binary(&query_price_oracle_contract_addr(deps)?)
         }
@@ -60,6 +65,18 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn query_spending(deps: Deps, account: Addr, subkey: String) -> StdResult<SpendingResponse> {
     let spending = SPENDINGS.load(deps.storage, (&account, subkey.as_str()))?;
     Ok(SpendingResponse { spending })
+}
+
+pub fn query_spendings_by_account(
+    deps: Deps,
+    account: Addr,
+) -> StdResult<SpendingsByAccountResponse> {
+    // TODO: make sure it has already limited by authenticator per account from go side? (question to team)
+    let spendings: Vec<(String, Spending)> = SPENDINGS
+        .prefix(&account)
+        .range(deps.storage, None, None, Order::Ascending)
+        .collect::<StdResult<Vec<(String, Spending)>>>()?;
+    Ok(SpendingsByAccountResponse { spendings })
 }
 
 pub fn query_price_oracle_contract_addr(deps: Deps) -> StdResult<Addr> {
