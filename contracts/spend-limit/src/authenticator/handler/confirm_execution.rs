@@ -44,7 +44,7 @@ pub fn confirm_execution(
             &params.reset_period,
             env.block.time,
         ) {
-            Err(overspent @ SpendLimitError::Overspent { .. }) => {
+            Err(overspent @ SpendLimitError::Overspend { .. }) => {
                 return Ok(Response::new().set_data(ConfirmationResult::Block {
                     msg: overspent.to_string(),
                 }));
@@ -72,7 +72,7 @@ mod tests {
 
     #[rstest]
     #[case::spend_at_limit(1000, 500, 500, ConfirmationResult::Confirm {})]
-    #[case::spend_over_limit(1000, 500, 501, ConfirmationResult::Block { msg: SpendLimitError::overspent(500, 501).to_string() })]
+    #[case::spend_over_limit(1000, 500, 501, ConfirmationResult::Block { msg: SpendLimitError::overspend(500, 501).to_string() })]
     fn test_confirm_execution_only_spends_quoted_denom(
         #[case] initial_balance: u128,
         #[case] limit: u128,

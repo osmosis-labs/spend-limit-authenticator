@@ -46,7 +46,7 @@ impl Spending {
         // ensure that the value spent in the period is not over the limit
         ensure!(
             updated_value_spent_in_period <= limit,
-            SpendLimitError::Overspent {
+            SpendLimitError::Overspend {
                 remaining: limit.saturating_sub(value_spent_in_period),
                 requested: spending_value,
             }
@@ -153,7 +153,7 @@ mod tests {
 
         assert_eq!(
             err,
-            SpendLimitError::Overspent {
+            SpendLimitError::Overspend {
                 remaining: Uint128::from(50_000_000u128),
                 requested: Uint128::from(50_000_001u128),
             }

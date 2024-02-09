@@ -13,17 +13,16 @@ pub enum SpendLimitError {
     #[error("Accumulating spent value error: {0}")]
     AccumulatingSpentValueError(#[from] OverflowError),
 
-    #[error("Overspent: remaining qouta {remaining}, requested {requested}")]
-    Overspent {
+    #[error("Overspend: remaining qouta {remaining}, requested {requested}")]
+    Overspend {
         remaining: Uint128,
         requested: Uint128,
-        // TODO: add `reset_at: OffsetDateTime`
     },
 }
 
 impl SpendLimitError {
-    pub fn overspent(remaining: u128, requested: u128) -> Self {
-        Self::Overspent {
+    pub fn overspend(remaining: u128, requested: u128) -> Self {
+        Self::Overspend {
             remaining: Uint128::from(remaining),
             requested: Uint128::from(requested),
         }
