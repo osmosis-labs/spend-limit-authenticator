@@ -45,9 +45,8 @@ pub fn confirm_execution(
             env.block.time,
         ) {
             Err(overspent @ SpendLimitError::Overspend { .. }) => {
-                return Ok(Response::new().set_data(ConfirmationResult::Block {
-                    msg: overspent.to_string(),
-                }));
+                let msg = overspent.to_string();
+                return Ok(Response::new().set_data(ConfirmationResult::Block { msg }));
             }
             otherwise => otherwise?,
         };
@@ -55,6 +54,9 @@ pub fn confirm_execution(
 
     // save the updated spending
     SPENDINGS.save(deps.storage, spend_limit_key, &spending)?;
+
+    // clean up the pre_exec balance
+    PRE_EXEC_BALANCES.remove(deps.storage, spend_limit_key);
 
     Ok(Response::new().set_data(ConfirmationResult::Confirm {}))
 }

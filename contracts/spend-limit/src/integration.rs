@@ -6,12 +6,29 @@ use cosmwasm_std::{to_json_binary, Coin};
 use osmosis_std::types::osmosis::authenticator::{
     MsgAddAuthenticator, MsgAddAuthenticatorResponse,
 };
-use osmosis_test_tube::{Account, Module, OsmosisTestApp, Runner, Wasm};
+use osmosis_test_tube::{
+    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, Bank, Module, OsmosisTestApp,
+    Runner, Wasm,
+};
+use time::{Duration, OffsetDateTime};
 
 use crate::{
     msg::InstantiateMsg,
-    spend_limit::{Period, SpendLimitParams},
+    spend_limit::{Period, SpendLimitError, SpendLimitParams},
 };
+
+macro_rules! assert_substring {
+    ($haystack:expr, $needle:expr) => {
+        let Some(start) = $haystack.rfind($needle.as_str()) else {
+            panic!(
+                "Expected string:\n    {}\nnot found in:\n    `{}`",
+                $needle, $haystack
+            );
+        };
+
+        assert_eq!($haystack[start..start + $needle.len()], $needle);
+    };
+}
 
 #[cw_serde]
 struct CosmwasmAuthenticatorData {
@@ -100,7 +117,7 @@ fn test_integration() {
         contract: contract_addr,
         params: to_json_binary(&SpendLimitParams {
             subkey: "default".to_string(),
-            limit: Coin::new(1_000_000_000_000_000, "uosmo"),
+            limit: Coin::new(1_000_000, "uosmo"),
             reset_period: Period::Day,
         })
         .unwrap()
@@ -121,4 +138,75 @@ fn test_integration() {
         .data;
 
     assert!(success);
+
+    let bank = Bank::new(&app);
+
+    // spend to the limit
+    bank.send(
+        MsgSend {
+            from_address: accs[0].address(),
+            to_address: accs[1].address(),
+            amount: vec![Coin::new(1_000_000, "uosmo").into()],
+        },
+        &accs[0],
+    )
+    .unwrap();
+
+    // spend some more
+    let res = bank.send(
+        MsgSend {
+            from_address: accs[0].address(),
+            to_address: accs[1].address(),
+            amount: vec![Coin::new(1, "uosmo").into()],
+        },
+        &accs[0],
+    );
+
+    assert_substring!(
+        res.as_ref().unwrap_err().to_string(),
+        SpendLimitError::overspend(0, 1).to_string()
+    );
+
+    let prev_ts = app.get_block_time_seconds() as i64;
+    let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
+    let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
+    let diff = next_dt - prev_ts;
+
+    app.increase_time(diff as u64);
+
+    bank.send(
+        MsgSend {
+            from_address: accs[0].address(),
+            to_address: accs[1].address(),
+            amount: vec![Coin::new(500_000, "uosmo").into()],
+        },
+        &accs[0],
+    )
+    .unwrap();
+
+    bank.send(
+        MsgSend {
+            from_address: accs[0].address(),
+            to_address: accs[1].address(),
+            amount: vec![Coin::new(499_999, "uosmo").into()],
+        },
+        &accs[0],
+    )
+    .unwrap();
+
+    let err = bank
+        .send(
+            MsgSend {
+                from_address: accs[0].address(),
+                to_address: accs[1].address(),
+                amount: vec![Coin::new(2, "uosmo").into()],
+            },
+            &accs[0],
+        )
+        .unwrap_err();
+
+    assert_substring!(
+        err.to_string(),
+        SpendLimitError::overspend(1, 2).to_string()
+    );
 }
