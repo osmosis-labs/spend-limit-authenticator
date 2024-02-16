@@ -131,10 +131,11 @@ fn valid_swap_routes(swap_routes: &[SwapAmountInRoute], quote_denom: &str) -> bo
 
 // TODO:
 // - [x] proper error handling
-// - write test
-//    - start with integration test and drive that down the line
+// - [x] start with integration test and drive that down the line
 // - [x] remove price oracle contract address
 // - [x] wiring
 //   - [x] instantiate with price infos
 //   - [x] remove qoute denom from params and use state
+// - unit tests
+// - fix todos
 // - documentation
