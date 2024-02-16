@@ -1,4 +1,6 @@
-use cosmwasm_std::{ensure, Decimal, Deps, DepsMut, Timestamp};
+use std::str::FromStr;
+
+use cosmwasm_std::{ensure, Decimal, Deps, DepsMut, StdError, Timestamp, Uint128};
 use cw_storage_plus::Map;
 use osmosis_std::shim::Timestamp as ProtoTimestamp;
 use osmosis_std::types::osmosis::{
@@ -82,14 +84,19 @@ fn fetch_twap_price(
         let pool_id = route.pool_id;
 
         // TODO: optimize this using direct mut ArithmeticTwapToNow request for no clone
-        let route_price = TwapQuerier::new(&deps.querier).arithmetic_twap_to_now(
-            pool_id,
-            base_asset,
-            conf.quote_denom.clone(),
-            Some(start_time.clone()),
-        )?;
+        let arithmetic_twap = TwapQuerier::new(&deps.querier)
+            .arithmetic_twap_to_now(
+                pool_id,
+                base_asset,
+                conf.quote_denom.clone(),
+                Some(start_time.clone()),
+            )?
+            .arithmetic_twap;
 
-        price = price.checked_mul(route_price.arithmetic_twap.parse::<Decimal>()?)?;
+        // arithmetic_twap is a string representation of LegacyDec
+        let arithmetic_twap = from_legacy_dec_str(&arithmetic_twap)?;
+
+        price = price.checked_mul(arithmetic_twap)?;
         base_asset = route.token_out_denom.clone();
     }
 
@@ -116,6 +123,13 @@ fn valid_swap_routes(swap_routes: &[SwapAmountInRoute], quote_denom: &str) -> bo
     } else {
         false
     }
+}
+
+/// Convert a Cosmos SDK's LegacyDec string to a Decimal
+/// LegacyDec string is a string of u128 with 18 decimal places
+/// which matches the precision of [`Decimal`] in cosmwasm_std
+fn from_legacy_dec_str(s: &str) -> Result<Decimal, StdError> {
+    Uint128::from_str(s).map(Decimal::new)
 }
 
 // TODO:
