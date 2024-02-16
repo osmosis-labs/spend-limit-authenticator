@@ -69,7 +69,7 @@ mod tests {
     use super::*;
     use crate::spend_limit::{Period, SpendLimitParams, Spending};
     use cosmwasm_std::{
-        testing::{mock_dependencies, mock_dependencies_with_balances, mock_env},
+        testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Response,
     };
     use osmosis_authenticators::ConfirmExecutionRequest;
