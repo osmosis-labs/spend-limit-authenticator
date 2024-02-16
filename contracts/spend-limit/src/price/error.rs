@@ -1,7 +1,6 @@
 use cosmwasm_std::OverflowError;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 use thiserror::Error;
-use time::error::ComponentRange;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum PriceError {
@@ -16,7 +15,4 @@ pub enum PriceError {
 
     #[error("Price calculation error: {0}")]
     PriceCalculationError(#[from] OverflowError),
-
-    #[error("Converting cosmwasm_std timestamp to offset datetime failed: {0}")]
-    TimestampConversionError(#[from] ComponentRange),
 }

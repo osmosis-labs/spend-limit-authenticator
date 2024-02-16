@@ -1,15 +1,16 @@
-use cosmwasm_std::{Decimal, DepsMut, Env, Response};
+use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
 
+use crate::price::get_and_cache_price;
 use crate::spend_limit::{calculate_spent_coins, SpendLimitError, SpendLimitParams};
 
-use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS};
+use crate::state::{PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
 
 use super::validate_and_parse_params;
 
 pub fn confirm_execution(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     ConfirmExecutionRequest {
         account,
@@ -33,15 +34,24 @@ pub fn confirm_execution(
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
 
-    // let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
+    let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
 
     for coin in spent_coins.iter() {
-        // TODO: query conversion rate
-        let price = Decimal::one();
+        // If the coin is not tracked, we don't count it towards the spending limit
+        let Some(price_info) = get_and_cache_price(
+            &PRICE_INFOS,
+            deps.branch(),
+            &conf,
+            env.block.time,
+            &coin.denom,
+        )?
+        else {
+            continue;
+        };
 
         match spending.spend(
             coin.amount,
-            price,
+            price_info.price,
             params.limit.amount,
             &params.reset_period,
             env.block.time,
@@ -67,7 +77,10 @@ pub fn confirm_execution(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spend_limit::{Period, SpendLimitParams, Spending};
+    use crate::{
+        price::PriceResolutionConfig,
+        spend_limit::{Period, SpendLimitParams, Spending},
+    };
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Response,
@@ -84,12 +97,12 @@ mod tests {
         #[case] spent: u128,
         #[case] expected: ConfirmationResult,
     ) {
-        let fixed_balance = Coin::new(500, "osmo");
+        let fixed_balance = Coin::new(500, "uosmo");
         // Setup the environment
         let mut deps = mock_dependencies_with_balances(&[(
             "account",
             &[
-                Coin::new(initial_balance - spent, "usdc"),
+                Coin::new(initial_balance - spent, "uusdc"),
                 fixed_balance.clone(),
             ],
         )]);
@@ -100,12 +113,23 @@ mod tests {
             .save(
                 deps.as_mut().storage,
                 key,
-                &vec![Coin::new(initial_balance, "usdc"), fixed_balance],
+                &vec![Coin::new(initial_balance, "uusdc"), fixed_balance],
             )
             .unwrap();
 
         SPENDINGS
             .save(&mut deps.storage, key, &Spending::default())
+            .unwrap();
+
+        PRICE_RESOLUTION_CONFIG
+            .save(
+                deps.as_mut().storage,
+                &PriceResolutionConfig {
+                    quote_denom: "uusdc".to_string(),
+                    staleness_threshold: 3_600_000_000_000u64.into(), // 1h
+                    twap_duration: 3_600_000_000_000u64.into(),       // 1h
+                },
+            )
             .unwrap();
 
         // Confirm the execution
@@ -114,7 +138,7 @@ mod tests {
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     subkey: "subkey1".to_string(),
-                    limit: Coin::new(limit, "usdc"),
+                    limit: Coin::new(limit, "uusdc"),
                     reset_period: Period::Day,
                 })
                 .unwrap(),
@@ -144,8 +168,9 @@ mod tests {
                 );
             }
             ConfirmationResult::Block { msg } => {
+                let res = res.unwrap();
                 assert_eq!(
-                    res.unwrap(),
+                    res,
                     Response::new().set_data(ConfirmationResult::Block { msg })
                 );
             }

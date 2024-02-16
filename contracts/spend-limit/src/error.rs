@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use cosmwasm_std::{CoinsError, StdError};
 
-use crate::{authenticator::AuthenticatorError, spend_limit::SpendLimitError};
+use crate::{authenticator::AuthenticatorError, price::PriceError, spend_limit::SpendLimitError};
 
 /// Never is a placeholder to ensure we don't return any errors
 #[derive(Error, Debug)]
@@ -25,22 +25,6 @@ pub enum ContractError {
     #[error("Spend limit error: {0}")]
     SpendLimitError(#[from] SpendLimitError),
 
-    #[error("QueryError: {val}")]
-    QueryError { val: String },
-
-    #[error("InvalidPoolRoute: {reason}")]
-    InvalidPoolRoute { reason: String },
-
-    #[error("InvalidTwapString: {twap}")]
-    InvalidTwapString { twap: String },
-
-    #[error("InvalidTwapOperation: {operation}")]
-    InvalidTwapOperation { operation: String },
-
-    #[error("InvalidTwapDenom: {denom}")]
-    TwapNotFound {
-        denom: String,
-        sell_denom: String,
-        pool_id: u64,
-    },
+    #[error("Price error: {0}")]
+    PriceResolutionError(#[from] PriceError),
 }
