@@ -1,4 +1,5 @@
 pub mod authenticator;
+pub mod price;
 pub mod spend_limit;
 pub mod twap;
 

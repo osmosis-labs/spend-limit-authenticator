@@ -45,8 +45,9 @@ pub fn confirm_execution(
             env.block.time,
         ) {
             Err(overspent @ SpendLimitError::Overspend { .. }) => {
-                let msg = overspent.to_string();
-                return Ok(Response::new().set_data(ConfirmationResult::Block { msg }));
+                return Ok(Response::new().set_data(ConfirmationResult::Block {
+                    msg: overspent.to_string(),
+                }));
             }
             otherwise => otherwise?,
         };
