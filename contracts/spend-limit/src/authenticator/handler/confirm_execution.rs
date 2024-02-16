@@ -33,7 +33,7 @@ pub fn confirm_execution(
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
 
-    let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
+    // let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
 
     for coin in spent_coins.iter() {
         // TODO: query conversion rate
