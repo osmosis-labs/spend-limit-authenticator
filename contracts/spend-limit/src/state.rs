@@ -4,8 +4,8 @@ use cw_storage_plus::{Item, Map};
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::{
-    price::PriceInfoStore,
-    spend_limit::{PreExecBalance, SpendingStorage},
+    price::{PriceInfoStore, PriceResolutionConfig},
+    spend_limit::{PreExecBalance, SpendingStore},
 };
 
 #[cw_serde]
@@ -17,7 +17,7 @@ pub struct TrackedDenom {
 pub type Denom = String;
 pub type Path = Vec<SwapAmountInRoute>;
 
-pub const SPENDINGS: SpendingStorage<'_> = Map::new("spendings");
+pub const SPENDINGS: SpendingStore<'_> = Map::new("spendings");
 
 /// [`PreExecBalance`] is a map of spending keys to the account balances.
 /// It is used to track the balances of the accounts before the transaction is executed,
@@ -29,5 +29,9 @@ pub const PRE_EXEC_BALANCES: PreExecBalance<'_> = Map::new("pre_exec_balance");
 /// Contract address of the price oracle used for determining the price of the assets.
 pub const PRICE_ORACLE_CONTRACT_ADDR: Item<Addr> = Item::new("price_oracle_contract_addr");
 
-pub const PRICE_INFO_STORE: PriceInfoStore<'_> =
-    PriceInfoStore::new("price_info_store_config", "price_infos");
+/// Configuration for the price resolution.
+pub const PRICE_RESOLUTION_CONFIG: Item<PriceResolutionConfig> =
+    Item::new("price_resolution_config");
+
+/// Store for the price info of the tracked denoms.
+pub const PRICE_INFOS: PriceInfoStore<'_> = Map::new("price_infos");

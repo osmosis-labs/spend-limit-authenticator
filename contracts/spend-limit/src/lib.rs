@@ -11,4 +11,7 @@ pub mod state;
 #[cfg(test)]
 pub mod integration;
 
+#[cfg(test)]
+mod test_helper;
+
 pub use crate::error::ContractError;

@@ -8,9 +8,9 @@ pub enum PriceError {
     #[error("{0}")]
     StdError(#[from] cosmwasm_std::StdError),
 
-    #[error("Swap routes must end with quote denom: {qoute_denom}, but got swap_routes: {swap_routes:?}")]
+    #[error("Swap routes must end with quote denom: {quote_denom}, but got swap_routes: {swap_routes:?}")]
     SwapRoutesMustEndWithQuoteDenom {
-        qoute_denom: String,
+        quote_denom: String,
         swap_routes: Vec<SwapAmountInRoute>,
     },
 

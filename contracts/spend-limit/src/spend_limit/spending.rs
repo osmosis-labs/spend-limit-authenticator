@@ -32,13 +32,12 @@ impl Spending {
     pub fn spend(
         &mut self,
         amount: Uint128,
-        conversion_rate: impl Fraction<Uint128>,
+        price: impl Fraction<Uint128>,
         limit: Uint128,
         period: &Period,
         at: Timestamp,
     ) -> SpendLimitResult<&mut Self> {
-        let spending_value =
-            amount.multiply_ratio(conversion_rate.numerator(), conversion_rate.denominator());
+        let spending_value = amount.multiply_ratio(price.numerator(), price.denominator());
 
         let value_spent_in_period = self.get_or_reset_value_spent(period, at)?;
         let updated_value_spent_in_period = value_spent_in_period.checked_add(spending_value)?;

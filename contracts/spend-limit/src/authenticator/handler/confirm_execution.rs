@@ -3,7 +3,7 @@ use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
 
 use crate::spend_limit::{calculate_spent_coins, SpendLimitError, SpendLimitParams};
 
-use crate::state::{PRE_EXEC_BALANCES, SPENDINGS};
+use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
 
 use super::validate_and_parse_params;
@@ -33,13 +33,15 @@ pub fn confirm_execution(
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
 
+    let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
+
     for coin in spent_coins.iter() {
         // TODO: query conversion rate
-        let conversion_rate = Decimal::one();
+        let price = Decimal::one();
 
         match spending.spend(
             coin.amount,
-            conversion_rate,
+            price,
             params.limit.amount,
             &params.reset_period,
             env.block.time,
@@ -67,7 +69,7 @@ mod tests {
     use super::*;
     use crate::spend_limit::{Period, SpendLimitParams, Spending};
     use cosmwasm_std::{
-        testing::{mock_dependencies_with_balances, mock_env},
+        testing::{mock_dependencies, mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Response,
     };
     use osmosis_authenticators::ConfirmExecutionRequest;

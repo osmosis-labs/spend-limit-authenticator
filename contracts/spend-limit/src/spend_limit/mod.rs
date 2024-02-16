@@ -12,7 +12,7 @@ pub use spending::{calculate_spent_coins, Spending};
 use cosmwasm_std::Addr;
 use cw_storage_plus::Map;
 
-pub type SpendingStorage<'a> = Map<'a, SpendingKey<'a>, Spending>;
+pub type SpendingStore<'a> = Map<'a, SpendingKey<'a>, Spending>;
 
 /// [`PreExecBalance`] is a map of spending keys to the coins spent.
 pub type PreExecBalance<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
