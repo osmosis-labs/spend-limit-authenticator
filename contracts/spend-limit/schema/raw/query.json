@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "spending"
+      ],
+      "properties": {
+        "spending": {
+          "type": "object",
+          "required": [
+            "account",
+            "subkey"
+          ],
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "subkey": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "spendings_by_account"
+      ],
+      "properties": {
+        "spendings_by_account": {
+          "type": "object",
+          "required": [
+            "account"
+          ],
+          "properties": {
+            "account": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}
