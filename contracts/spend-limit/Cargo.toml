@@ -30,6 +30,6 @@ optimize = """docker run --rm -v "$(pwd)":/code \
 
 [dev-dependencies]
 mock-cosmwasm-contract = "0.1.2"
-# osmosis-test-tube = {git = " https://github.com/osmosis-labs/test-tube", branch = "authenticator"}
-osmosis-test-tube = {path = "../../../test-tube/packages/osmosis-test-tube"}
+osmosis-test-tube = {git = " https://github.com/osmosis-labs/test-tube", branch = "authenticator"}
+# osmosis-test-tube = {path = "../../../test-tube/packages/osmosis-test-tube"}
 rstest = "0.18.2"
