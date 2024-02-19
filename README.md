@@ -42,3 +42,13 @@ Output wasm bytecode is stored at `target/wasm32-unknown-unknown/release/spend_l
 ### Testing
 
 This repo has automated unit testing as well as integration tests using [`test-tube`](https://github.com/osmosis-labs/test-tube). `test-tube` requires the above artifacts to be built in order to run the tests.
+
+### Typescript client
+
+The typescript client is located in the [`ts/sdk`](./ts/sdk) directory. It is used to interact with the spend limit authenticator contract.
+
+To update the client when msgs definition changes, run:
+
+```sh
+beaker wasm ts-gen spend-limit
+```
