@@ -79,20 +79,16 @@ fn fetch_twap_price(
         }
     );
 
-    let start_time = block_time.minus_nanos(conf.twap_duration.u64());
-
-    let start_time = to_proto_timestamp(start_time);
-
-    let mut base_denom = base_denom.to_string();
-
-    // swap_routes must not be empty,
+    // swap_routes will never be empty, as checked in the above function
     // so price will never remain 1 implicitly
     let mut price = Decimal::one();
+
+    let start_time = to_proto_timestamp(block_time.minus_nanos(conf.twap_duration.u64()));
+    let mut base_denom = base_denom.to_string();
 
     for route in swap_routes.iter() {
         let pool_id = route.pool_id;
 
-        // TODO: optimize this using direct mut ArithmeticTwapToNow request for no clone
         let arithmetic_twap = TwapQuerier::new(&deps.querier)
             .arithmetic_twap_to_now(
                 pool_id,
