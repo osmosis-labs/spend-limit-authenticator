@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, StdError};
+use cosmwasm_std::{Addr, StdError, Uint64};
 use thiserror::Error;
 
 use crate::spend_limit::SpendingKey;
@@ -20,8 +20,11 @@ pub enum AuthenticatorError {
     #[error("Invalid denom: {denom}")]
     InvalidDenom { denom: String },
 
-    #[error("Authenticator already exists for account {account} and subkey {subkey}")]
-    AuthenticatorAlreadyExists { account: Addr, subkey: String },
+    #[error("Authenticator already exists for account {account} and authenticator id {authenticator_id}")]
+    AuthenticatorAlreadyExists {
+        account: Addr,
+        authenticator_id: Uint64,
+    },
 
     #[error("PreExec balances already exists for this key: {key}")]
     DirtyPreExecBalances { key: String },
@@ -44,10 +47,10 @@ impl AuthenticatorError {
         }
     }
 
-    pub fn authenticator_already_exists(account: Addr, subkey: &str) -> Self {
+    pub fn authenticator_already_exists(account: Addr, authenticator_id: u64) -> Self {
         Self::AuthenticatorAlreadyExists {
             account,
-            subkey: subkey.to_string(),
+            authenticator_id: Uint64::from(authenticator_id),
         }
     }
 }

@@ -57,7 +57,7 @@ fn test_integration_no_conversion() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            subkey: "subkey1".to_string(),
+            authenticator_id: 2u64.into(),
             limit: Coin::new(1_000_000, "uosmo"),
             reset_period: Period::Day,
         },
@@ -249,7 +249,7 @@ fn test_integration_with_conversion() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            subkey: "subkey1".to_string(),
+            authenticator_id: 2u64.into(),
             limit: Coin::new(1_000_000, UUSDC),
             reset_period: Period::Day,
         },

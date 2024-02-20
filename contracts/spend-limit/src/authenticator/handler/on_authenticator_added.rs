@@ -27,13 +27,13 @@ pub fn on_authenticator_added(
         AuthenticatorError::invalid_denom(authenticator_params.limit.denom.as_str())
     );
 
-    // Make sure (account, authenticator_params.subkey) is not already present in the state
-    let key = (&account, authenticator_params.subkey.as_str());
+    // Make sure (account, authenticator_id) is not already present in the state
+    let key = (&account, authenticator_params.authenticator_id.u64());
     ensure!(
         !SPENDINGS.has(deps.storage, key),
         AuthenticatorError::authenticator_already_exists(
             account,
-            authenticator_params.subkey.as_str()
+            authenticator_params.authenticator_id.u64()
         )
     );
 
@@ -87,7 +87,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    subkey: "500invalid_denom".to_string(),
+                    authenticator_id: 2u64.into(),
                     limit: Coin::new(500__000_000, "invalid_denom"),
                     reset_period: Period::Day,
                 })
@@ -105,7 +105,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    subkey: "500usdc".to_string(),
+                    authenticator_id: 2u64.into(),
                     limit: Coin::new(500__000_000, USDC),
                     reset_period: Period::Day,
                 })
@@ -118,16 +118,16 @@ mod tests {
 
         // check the state
         let spending = SPENDINGS
-            .load(deps.as_ref().storage, (&Addr::unchecked("addr"), "500usdc"))
+            .load(deps.as_ref().storage, (&Addr::unchecked("addr"), 2))
             .unwrap();
         assert_eq!(spending, Spending::default());
 
-        // Adding the authenticator with the same (account, subkey) should fail
+        // Adding the authenticator with the same (account, authenticator_id) should fail
         let request = OnAuthenticatorAddedRequest {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    subkey: "500usdc".to_string(),
+                    authenticator_id: 2u64.into(),
                     limit: Coin::new(500__000_000, USDC),
                     reset_period: Period::Month,
                 })
@@ -137,7 +137,7 @@ mod tests {
 
         assert_eq!(
             on_authenticator_added(deps.as_mut(), mock_env(), request).unwrap_err(),
-            AuthenticatorError::authenticator_already_exists(Addr::unchecked("addr"), "500usdc")
+            AuthenticatorError::authenticator_already_exists(Addr::unchecked("addr"), 2)
         );
     }
 }

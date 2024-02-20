@@ -2,13 +2,13 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
+    Uint64,
 };
 use cw2::set_contract_version;
 
 use crate::authenticator;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
 use crate::price::track_denom;
-use crate::spend_limit::Spending;
 use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
 
@@ -64,9 +64,12 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Spending { account, subkey } => {
+        QueryMsg::Spending {
+            account,
+            authenticator_id,
+        } => {
             let account = deps.api.addr_validate(&account)?;
-            to_json_binary(&query_spending(deps, account, subkey)?)
+            to_json_binary(&query_spending(deps, account, authenticator_id)?)
         }
         QueryMsg::SpendingsByAccount { account } => {
             let account = deps.api.addr_validate(&account)?;
@@ -75,8 +78,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
-pub fn query_spending(deps: Deps, account: Addr, subkey: String) -> StdResult<SpendingResponse> {
-    let spending = SPENDINGS.load(deps.storage, (&account, subkey.as_str()))?;
+pub fn query_spending(
+    deps: Deps,
+    account: Addr,
+    authenticator_id: Uint64,
+) -> StdResult<SpendingResponse> {
+    let spending = SPENDINGS.load(deps.storage, (&account, authenticator_id.u64()))?;
     Ok(SpendingResponse { spending })
 }
 
@@ -84,10 +91,14 @@ pub fn query_spendings_by_account(
     deps: Deps,
     account: Addr,
 ) -> StdResult<SpendingsByAccountResponse> {
-    // TODO: make sure it has already limited by authenticator per account from go side? (question to team)
-    let spendings: Vec<(String, Spending)> = SPENDINGS
+    let spendings = SPENDINGS
         .prefix(&account)
         .range(deps.storage, None, None, Order::Ascending)
-        .collect::<StdResult<Vec<(String, Spending)>>>()?;
+        .map(|spending_res| {
+            let (key, spending) = spending_res?;
+            let authenticator_id = Uint64::from(key);
+            Ok((authenticator_id, spending))
+        })
+        .collect::<StdResult<Vec<_>>>()?;
     Ok(SpendingsByAccountResponse { spendings })
 }

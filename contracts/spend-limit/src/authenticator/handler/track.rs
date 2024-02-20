@@ -16,18 +16,24 @@ pub fn track(
         ..
     }: TrackRequest,
 ) -> AuthenticatorResult<Response> {
-    let SpendLimitParams { subkey, .. } = validate_and_parse_params(authenticator_params)?;
-    update_pre_exec_balance(deps, &account, &subkey)?;
+    let SpendLimitParams {
+        authenticator_id, ..
+    } = validate_and_parse_params(authenticator_params)?;
+    update_pre_exec_balance(deps, &account, authenticator_id.u64())?;
 
     Ok(Response::new())
 }
 
-fn update_pre_exec_balance(deps: DepsMut, account: &Addr, subkey: &str) -> AuthenticatorResult<()> {
+fn update_pre_exec_balance(
+    deps: DepsMut,
+    account: &Addr,
+    authenticator_id: u64,
+) -> AuthenticatorResult<()> {
     // query all the balances of the account
     let balances = deps.querier.query_all_balances(account)?;
 
     // make sure the pre-exec balance is cleaned up
-    let key = (account, subkey);
+    let key = (account, authenticator_id);
     let no_dirty_pre_exec_balance = !PRE_EXEC_BALANCES.has(deps.storage, key);
     ensure!(
         no_dirty_pre_exec_balance,
@@ -59,7 +65,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    subkey: "subkey1".to_string(),
+                    authenticator_id: 2u64.into(),
                     limit: Coin::new(500, "usdc"),
                     reset_period: Period::Day,
                 })
@@ -75,7 +81,7 @@ mod tests {
         assert_eq!(response, Response::new());
 
         // Verify that the pre_exec_balance is updated
-        let key = (&Addr::unchecked("addr"), "subkey1");
+        let key = (&Addr::unchecked("addr"), 2);
         let pre_exec_balance = PRE_EXEC_BALANCES.load(deps.as_ref().storage, key).unwrap();
         assert_eq!(pre_exec_balance, vec![Coin::new(1000, "usdc")]);
     }
@@ -85,7 +91,7 @@ mod tests {
         let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
 
         // Simulate existing pre-exec balance to trigger failure
-        let key = (&Addr::unchecked("addr"), "subkey1");
+        let key = (&Addr::unchecked("addr"), 2);
         PRE_EXEC_BALANCES
             .save(deps.as_mut().storage, key, &vec![Coin::new(500, "usdc")])
             .unwrap();
@@ -94,7 +100,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    subkey: "subkey1".to_string(),
+                    authenticator_id: 2u64.into(),
                     limit: Coin::new(500, "usdc"),
                     reset_period: Period::Day,
                 })
