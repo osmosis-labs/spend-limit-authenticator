@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 use cosmwasm_std::{
     from_json,
     testing::{MockApi, MockQuerier, MockStorage},
-    to_json_binary, Binary, Coin, CustomQuery, Empty, OwnedDeps, Querier, QuerierResult,
-    QuerierWrapper, QueryRequest, SystemError, SystemResult,
+    to_json_binary, Binary, Coin, ContractResult, CustomQuery, Empty, OwnedDeps, Querier,
+    QuerierResult, QuerierWrapper, QueryRequest, SystemError, SystemResult,
 };
 use osmosis_std::types::osmosis::twap::v1beta1::{
     ArithmeticTwapToNowRequest, ArithmeticTwapToNowResponse, TwapQuerier,
@@ -73,7 +73,9 @@ pub fn mock_dependencies_with_stargate_querier(
 }
 
 pub fn arithmetic_twap_to_now_query_handler(
-    req_mapper: Box<dyn Fn(ArithmeticTwapToNowRequest) -> ArithmeticTwapToNowResponse>,
+    req_mapper: Box<
+        dyn Fn(ArithmeticTwapToNowRequest) -> ContractResult<ArithmeticTwapToNowResponse>,
+    >,
 ) -> QueryHandler {
     Box::new(move |path: String, data: Binary| match path.as_str() {
         "/osmosis.twap.v1beta1.Query/ArithmeticTwapToNow" => {
@@ -87,7 +89,15 @@ pub fn arithmetic_twap_to_now_query_handler(
                 }
             };
 
-            SystemResult::Ok(to_json_binary(&req_mapper(request)).into())
+            let res = req_mapper(request);
+
+            match res {
+                ContractResult::Ok(v) => SystemResult::Ok(to_json_binary(&v).into()),
+                ContractResult::Err(e) => SystemResult::Err(SystemError::InvalidRequest {
+                    error: e,
+                    request: data,
+                }),
+            }
         }
         _ => SystemResult::Err(SystemError::UnsupportedRequest { kind: path }),
     })
@@ -104,11 +114,11 @@ fn test_stargate_handler() {
             let arithmetic_twap = match (base_asset, quote_asset) {
                 ("uatom", "uosmo") => "1",
                 ("uion", "uosmo") => "2",
-                _ => panic!("unexpected request: {:?}", req),
+                _ => return ContractResult::Err("Price not found".to_string()),
             }
             .to_string();
 
-            ArithmeticTwapToNowResponse { arithmetic_twap }
+            ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap })
         })),
     );
 

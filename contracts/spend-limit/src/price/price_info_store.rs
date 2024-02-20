@@ -127,6 +127,7 @@ fn valid_swap_routes(swap_routes: &[SwapAmountInRoute], quote_denom: &str) -> bo
 
 #[cfg(test)]
 mod tests {
+    use cosmwasm_std::ContractResult;
     use osmosis_std::types::osmosis::twap::v1beta1::ArithmeticTwapToNowResponse;
 
     use crate::{
@@ -159,16 +160,19 @@ mod tests {
                 let start_time = req.start_time.clone().unwrap();
 
                 if start_time != expected_start_time {
-                    panic!("expected start time");
+                    return ContractResult::Err(format!(
+                        "expected start time: {:?}, got: {:?}",
+                        expected_start_time, start_time
+                    ));
                 }
 
                 let arithmetic_twap = match (base_asset, quote_asset) {
                     ("uosmo", UUSDC) => "1.500000000000000000",
-                    _ => panic!("unexpected request: {:?}", req),
+                    _ => return ContractResult::Err("Price not found".to_string()),
                 }
                 .to_string();
 
-                ArithmeticTwapToNowResponse { arithmetic_twap }
+                ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap })
             })),
         );
 
