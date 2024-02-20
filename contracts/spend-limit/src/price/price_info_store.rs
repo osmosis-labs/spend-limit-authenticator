@@ -152,7 +152,7 @@ mod tests {
         let expected_start_time =
             to_proto_timestamp(block_time.minus_nanos(conf.twap_duration.u64()));
 
-        let mut deps = mock_dependencies_with_stargate_querier(
+        let deps = mock_dependencies_with_stargate_querier(
             &[],
             arithmetic_twap_to_now_query_handler(Box::new(move |req| {
                 let base_asset = req.base_asset.as_str();
@@ -181,20 +181,138 @@ mod tests {
             token_out_denom: UUSDC.to_string(),
         }];
 
-        track_denom(
+        let price_info = PRICE_INFOS.load(deps.as_ref().storage, "uosmo").unwrap();
+        assert_eq!(
+            price_info,
+            PriceInfo {
+                price: "1.400000000000000000".parse::<Decimal>().unwrap(),
+                last_updated_time: block_time,
+                swap_routes
+            }
+        );
+    }
+
+    #[test]
+    fn test_get_and_cache_price() {
+        let conf = PriceResolutionConfig {
+            quote_denom: UUSDC.to_string(),
+            staleness_threshold: 3_600_000_000_000u64.into(), // 1h
+            twap_duration: 3_600_000_000_000u64.into(),       // 1h
+        };
+        let last_updated_time = Timestamp::from_nanos(1708416816_000000000);
+
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[],
+            arithmetic_twap_to_now_query_handler(Box::new(move |req| {
+                let base_asset = req.base_asset.as_str();
+                let quote_asset = req.quote_asset.as_str();
+
+                let arithmetic_twap = match (base_asset, quote_asset) {
+                    ("uosmo", UUSDC) => "1.500000000000000000",
+                    _ => return ContractResult::Err("Price not found".to_string()),
+                }
+                .to_string();
+
+                ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap })
+            })),
+        );
+
+        let swap_routes = vec![SwapAmountInRoute {
+            pool_id: 1,
+            token_out_denom: UUSDC.to_string(),
+        }];
+
+        let cached_price_info = PriceInfo {
+            price: "1.400000000000000000".parse::<Decimal>().unwrap(),
+            last_updated_time: last_updated_time.clone(),
+            swap_routes: swap_routes.clone(),
+        };
+
+        // save cached price
+        PRICE_INFOS
+            .save(&mut deps.storage, "uosmo", &cached_price_info)
+            .unwrap();
+
+        // cache hit
+        let price_info = get_and_cache_price(
             &PRICE_INFOS,
             deps.as_mut(),
             &conf,
+            last_updated_time.plus_nanos(1_800_000_000_000u64), // + 30m
             "uosmo",
-            block_time,
-            swap_routes,
         )
         .unwrap();
+        assert_eq!(price_info, Some(cached_price_info));
 
-        let price_info = PRICE_INFOS.load(deps.as_ref().storage, "uosmo").unwrap();
+        // cache miss, update
+        let price_info = get_and_cache_price(
+            &PRICE_INFOS,
+            deps.as_mut(),
+            &conf,
+            last_updated_time.plus_nanos(3_600_000_000_001u64), // + 1h + 1ns
+            "uosmo",
+        )
+        .unwrap();
         assert_eq!(
-            price_info.price,
-            "1.500000000000000000".parse::<Decimal>().unwrap()
+            price_info,
+            Some(PriceInfo {
+                price: "1.500000000000000000".parse::<Decimal>().unwrap(),
+                last_updated_time: last_updated_time.plus_nanos(3_600_000_000_001u64), // + 1h + 1ns
+                swap_routes: swap_routes.clone()
+            })
         );
+
+        // cache hit updated one
+        let price_info = get_and_cache_price(
+            &PRICE_INFOS,
+            deps.as_mut(),
+            &conf,
+            last_updated_time.plus_nanos(3_600_000_000_002u64), // + 1h + 2ns
+            "uosmo",
+        )
+        .unwrap();
+        assert_eq!(
+            price_info,
+            Some(PriceInfo {
+                price: "1.500000000000000000".parse::<Decimal>().unwrap(),
+                last_updated_time: last_updated_time.plus_nanos(3_600_000_000_001u64), // + 1h + 1ns
+                swap_routes
+            })
+        );
+
+        // get quote denom
+        let price_info = get_and_cache_price(
+            &PRICE_INFOS,
+            deps.as_mut(),
+            &conf,
+            last_updated_time.plus_nanos(3_600_000_000_002u64), // + 1h + 2ns
+            UUSDC,
+        )
+        .unwrap();
+        assert_eq!(
+            price_info,
+            Some(PriceInfo {
+                price: Decimal::one(),
+                last_updated_time: last_updated_time.plus_nanos(3_600_000_000_002u64), // + 1h + 2ns
+                swap_routes: vec![]
+            })
+        );
+
+        // get non-tracked denom
+        let price_info = get_and_cache_price(
+            &PRICE_INFOS,
+            deps.as_mut(),
+            &conf,
+            last_updated_time.plus_nanos(3_600_000_000_002u64), // + 1h + 2ns
+            "uatom",
+        )
+        .unwrap();
+        assert_eq!(price_info, None);
     }
+
+    // TODO:
+    // - test_fetch_twap_price
+    //    - invalid swap routes: empty, not ending with quote denom, no base denom in pool
+    //    - price calculation: error / success
+    // - test_to_proto_timestamp
 }
