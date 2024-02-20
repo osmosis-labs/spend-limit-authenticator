@@ -4,12 +4,12 @@
 * and run the @cosmwasm/ts-codegen generate command to regenerate this file.
 */
 import { CosmWasmClient } from "@cosmjs/cosmwasm-stargate";
-import { SpendingResponse, SpendingsByAccountResponse } from "./SpendLimit.types";
+import { Uint64, SpendingResponse, SpendingsByAccountResponse } from "./SpendLimit.types";
 export interface SpendLimitReadOnlyInterface {
     contractAddress: string;
-    spending: ({ account, subkey }: {
+    spending: ({ account, authenticatorId }: {
         account: string;
-        subkey: string;
+        authenticatorId: Uint64;
     }) => Promise<SpendingResponse>;
     spendingsByAccount: ({ account }: {
         account: string;
@@ -19,9 +19,9 @@ export declare class SpendLimitQueryClient implements SpendLimitReadOnlyInterfac
     client: CosmWasmClient;
     contractAddress: string;
     constructor(client: CosmWasmClient, contractAddress: string);
-    spending: ({ account, subkey }: {
+    spending: ({ account, authenticatorId }: {
         account: string;
-        subkey: string;
+        authenticatorId: Uint64;
     }) => Promise<SpendingResponse>;
     spendingsByAccount: ({ account }: {
         account: string;

@@ -26,7 +26,7 @@ export interface SwapAmountInRoute {
 export type QueryMsg = {
   spending: {
     account: string;
-    subkey: string;
+    authenticator_id: Uint64;
   };
 } | {
   spendings_by_account: {
@@ -43,5 +43,5 @@ export interface Spending {
   value_spent_in_period: Uint128;
 }
 export interface SpendingsByAccountResponse {
-  spendings: [string, Spending][];
+  spendings: [Uint64, Spending][];
 }

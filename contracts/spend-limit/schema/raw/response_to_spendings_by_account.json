@@ -12,7 +12,7 @@
         "type": "array",
         "items": [
           {
-            "type": "string"
+            "$ref": "#/definitions/Uint64"
           },
           {
             "$ref": "#/definitions/Spending"

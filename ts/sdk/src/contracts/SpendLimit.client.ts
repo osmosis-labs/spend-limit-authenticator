@@ -8,15 +8,16 @@ import { CosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import {
   SpendingResponse,
   SpendingsByAccountResponse,
+  Uint64,
 } from "./SpendLimit.types";
 export interface SpendLimitReadOnlyInterface {
   contractAddress: string;
   spending: ({
     account,
-    subkey,
+    authenticatorId,
   }: {
     account: string;
-    subkey: string;
+    authenticatorId: Uint64;
   }) => Promise<SpendingResponse>;
   spendingsByAccount: ({
     account,
@@ -37,15 +38,15 @@ export class SpendLimitQueryClient implements SpendLimitReadOnlyInterface {
 
   spending = async ({
     account,
-    subkey,
+    authenticatorId,
   }: {
     account: string;
-    subkey: string;
+    authenticatorId: Uint64;
   }): Promise<SpendingResponse> => {
     return this.client.queryContractSmart(this.contractAddress, {
       spending: {
         account,
-        subkey,
+        authenticator_id: authenticatorId,
       },
     });
   };
