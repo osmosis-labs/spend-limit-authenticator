@@ -124,3 +124,73 @@ fn valid_swap_routes(swap_routes: &[SwapAmountInRoute], quote_denom: &str) -> bo
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use osmosis_std::types::osmosis::twap::v1beta1::ArithmeticTwapToNowResponse;
+
+    use crate::{
+        state::PRICE_INFOS,
+        test_helper::mock_stargate_querier::{
+            arithmetic_twap_to_now_query_handler, mock_dependencies_with_stargate_querier,
+        },
+    };
+
+    use super::*;
+
+    const UUSDC: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
+
+    #[test]
+    fn test_track_denom() {
+        let conf = PriceResolutionConfig {
+            quote_denom: UUSDC.to_string(),
+            staleness_threshold: 3_600_000_000_000u64.into(), // 1h
+            twap_duration: 3_600_000_000_000u64.into(),       // 1h
+        };
+        let block_time = Timestamp::from_nanos(1708416816_000000000);
+        let expected_start_time =
+            to_proto_timestamp(block_time.minus_nanos(conf.twap_duration.u64()));
+
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[],
+            arithmetic_twap_to_now_query_handler(Box::new(move |req| {
+                let base_asset = req.base_asset.as_str();
+                let quote_asset = req.quote_asset.as_str();
+                let start_time = req.start_time.clone().unwrap();
+
+                if start_time != expected_start_time {
+                    panic!("expected start time");
+                }
+
+                let arithmetic_twap = match (base_asset, quote_asset) {
+                    ("uosmo", UUSDC) => "1.500000000000000000",
+                    _ => panic!("unexpected request: {:?}", req),
+                }
+                .to_string();
+
+                ArithmeticTwapToNowResponse { arithmetic_twap }
+            })),
+        );
+
+        let swap_routes = vec![SwapAmountInRoute {
+            pool_id: 1,
+            token_out_denom: UUSDC.to_string(),
+        }];
+
+        track_denom(
+            &PRICE_INFOS,
+            deps.as_mut(),
+            &conf,
+            "uosmo",
+            block_time,
+            swap_routes,
+        )
+        .unwrap();
+
+        let price_info = PRICE_INFOS.load(deps.as_ref().storage, "uosmo").unwrap();
+        assert_eq!(
+            price_info.price,
+            "1.500000000000000000".parse::<Decimal>().unwrap()
+        );
+    }
+}

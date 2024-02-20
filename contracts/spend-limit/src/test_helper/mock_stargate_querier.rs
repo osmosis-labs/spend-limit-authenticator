@@ -60,7 +60,7 @@ impl<C: CustomQuery + DeserializeOwned> Querier for MockStargateQuerier<C> {
     }
 }
 
-fn mock_dependencies_with_stargate_querier(
+pub fn mock_dependencies_with_stargate_querier(
     balances: &[(&str, &[Coin])],
     stargate_query_handler: QueryHandler,
 ) -> OwnedDeps<MockStorage, MockApi, MockStargateQuerier, Empty> {
@@ -72,8 +72,8 @@ fn mock_dependencies_with_stargate_querier(
     }
 }
 
-fn arithmetic_twap_to_now_query_handler(
-    req_mapper: fn(ArithmeticTwapToNowRequest) -> ArithmeticTwapToNowResponse,
+pub fn arithmetic_twap_to_now_query_handler(
+    req_mapper: Box<dyn Fn(ArithmeticTwapToNowRequest) -> ArithmeticTwapToNowResponse>,
 ) -> QueryHandler {
     Box::new(move |path: String, data: Binary| match path.as_str() {
         "/osmosis.twap.v1beta1.Query/ArithmeticTwapToNow" => {
@@ -97,7 +97,7 @@ fn arithmetic_twap_to_now_query_handler(
 fn test_stargate_handler() {
     let deps = mock_dependencies_with_stargate_querier(
         &[],
-        arithmetic_twap_to_now_query_handler(|req| {
+        arithmetic_twap_to_now_query_handler(Box::new(|req| {
             let base_asset = req.base_asset.as_str();
             let quote_asset = req.quote_asset.as_str();
 
@@ -109,7 +109,7 @@ fn test_stargate_handler() {
             .to_string();
 
             ArithmeticTwapToNowResponse { arithmetic_twap }
-        }),
+        })),
     );
 
     let queier_wrapper: QuerierWrapper<'_, Empty> = QuerierWrapper::new(&deps.querier);
