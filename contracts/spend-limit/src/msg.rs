@@ -1,5 +1,4 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Uint64;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::{price::PriceResolutionConfig, spend_limit::Spending};
@@ -30,7 +29,7 @@ pub enum QueryMsg {
     #[returns(SpendingResponse)]
     Spending {
         account: String,
-        authenticator_id: Uint64,
+        authenticator_id: String,
     },
 
     #[returns(SpendingsByAccountResponse)]
@@ -44,5 +43,5 @@ pub struct SpendingResponse {
 
 #[cw_serde]
 pub struct SpendingsByAccountResponse {
-    pub spendings: Vec<(Uint64, Spending)>,
+    pub spendings: Vec<(String, Spending)>,
 }

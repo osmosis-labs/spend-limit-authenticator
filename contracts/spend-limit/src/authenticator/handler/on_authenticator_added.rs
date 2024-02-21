@@ -28,12 +28,12 @@ pub fn on_authenticator_added(
     );
 
     // Make sure (account, authenticator_id) is not already present in the state
-    let key = (&account, authenticator_params.authenticator_id.u64());
+    let key = (&account, authenticator_params.authenticator_id.as_str());
     ensure!(
         !SPENDINGS.has(deps.storage, key),
         AuthenticatorError::authenticator_already_exists(
             account,
-            authenticator_params.authenticator_id.u64()
+            authenticator_params.authenticator_id.as_str()
         )
     );
 
@@ -87,7 +87,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500__000_000, "invalid_denom"),
                     reset_period: Period::Day,
                 })
@@ -105,7 +105,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500__000_000, USDC),
                     reset_period: Period::Day,
                 })
@@ -118,7 +118,7 @@ mod tests {
 
         // check the state
         let spending = SPENDINGS
-            .load(deps.as_ref().storage, (&Addr::unchecked("addr"), 2))
+            .load(deps.as_ref().storage, (&Addr::unchecked("addr"), "2"))
             .unwrap();
         assert_eq!(spending, Spending::default());
 
@@ -127,7 +127,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500__000_000, USDC),
                     reset_period: Period::Month,
                 })
@@ -137,7 +137,7 @@ mod tests {
 
         assert_eq!(
             on_authenticator_added(deps.as_mut(), mock_env(), request).unwrap_err(),
-            AuthenticatorError::authenticator_already_exists(Addr::unchecked("addr"), 2)
+            AuthenticatorError::authenticator_already_exists(Addr::unchecked("addr"), "2")
         );
     }
 }

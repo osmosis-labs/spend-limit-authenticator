@@ -20,7 +20,7 @@ pub fn confirm_execution(
 ) -> Result<Response, ContractError> {
     let params: SpendLimitParams = validate_and_parse_params(authenticator_params)?;
 
-    let spend_limit_key = (&account, params.authenticator_id.u64());
+    let spend_limit_key = (&account, params.authenticator_id.as_str());
 
     // get the pre_exec balance for this key
     let pre_exec_balances = PRE_EXEC_BALANCES.load(deps.storage, spend_limit_key)?;
@@ -107,7 +107,7 @@ mod tests {
             ],
         )]);
 
-        let key = (&Addr::unchecked("account"), 2);
+        let key = (&Addr::unchecked("account"), "2");
 
         PRE_EXEC_BALANCES
             .save(
@@ -137,7 +137,7 @@ mod tests {
             account: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: Coin::new(limit, "uusdc"),
                     reset_period: Period::Day,
                 })

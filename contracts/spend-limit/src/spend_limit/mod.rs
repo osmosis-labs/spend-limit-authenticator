@@ -20,4 +20,4 @@ pub type PreExecBalance<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
 /// SpendingKey is a key for the spending storage.
 /// It is a tuple of (account, authenticator_id) which
 /// allows multiple spend limits per account.
-pub type SpendingKey<'a> = (&'a Addr, u64);
+pub type SpendingKey<'a> = (&'a Addr, &'a str);

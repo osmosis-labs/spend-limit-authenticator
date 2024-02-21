@@ -19,7 +19,7 @@ pub fn track(
     let SpendLimitParams {
         authenticator_id, ..
     } = validate_and_parse_params(authenticator_params)?;
-    update_pre_exec_balance(deps, &account, authenticator_id.u64())?;
+    update_pre_exec_balance(deps, &account, authenticator_id.as_str())?;
 
     Ok(Response::new())
 }
@@ -27,7 +27,7 @@ pub fn track(
 fn update_pre_exec_balance(
     deps: DepsMut,
     account: &Addr,
-    authenticator_id: u64,
+    authenticator_id: &str,
 ) -> AuthenticatorResult<()> {
     // query all the balances of the account
     let balances = deps.querier.query_all_balances(account)?;
@@ -65,7 +65,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500, "usdc"),
                     reset_period: Period::Day,
                 })
@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(response, Response::new());
 
         // Verify that the pre_exec_balance is updated
-        let key = (&Addr::unchecked("addr"), 2);
+        let key = (&Addr::unchecked("addr"), "2");
         let pre_exec_balance = PRE_EXEC_BALANCES.load(deps.as_ref().storage, key).unwrap();
         assert_eq!(pre_exec_balance, vec![Coin::new(1000, "usdc")]);
     }
@@ -91,7 +91,7 @@ mod tests {
         let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
 
         // Simulate existing pre-exec balance to trigger failure
-        let key = (&Addr::unchecked("addr"), 2);
+        let key = (&Addr::unchecked("addr"), "2");
         PRE_EXEC_BALANCES
             .save(deps.as_mut().storage, key, &vec![Coin::new(500, "usdc")])
             .unwrap();
@@ -100,7 +100,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500, "usdc"),
                     reset_period: Period::Day,
                 })

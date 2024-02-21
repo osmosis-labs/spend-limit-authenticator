@@ -152,7 +152,7 @@ mod tests {
         let expected_start_time =
             to_proto_timestamp(block_time.minus_nanos(conf.twap_duration.u64()));
 
-        let deps = mock_dependencies_with_stargate_querier(
+        let mut deps = mock_dependencies_with_stargate_querier(
             &[],
             arithmetic_twap_to_now_query_handler(Box::new(move |req| {
                 let base_asset = req.base_asset.as_str();
@@ -181,11 +181,21 @@ mod tests {
             token_out_denom: UUSDC.to_string(),
         }];
 
+        track_denom(
+            &PRICE_INFOS,
+            deps.as_mut(),
+            &conf,
+            "uosmo",
+            block_time,
+            swap_routes.clone(),
+        )
+        .unwrap();
+
         let price_info = PRICE_INFOS.load(deps.as_ref().storage, "uosmo").unwrap();
         assert_eq!(
             price_info,
             PriceInfo {
-                price: "1.400000000000000000".parse::<Decimal>().unwrap(),
+                price: "1.500000000000000000".parse::<Decimal>().unwrap(),
                 last_updated_time: block_time,
                 swap_routes
             }

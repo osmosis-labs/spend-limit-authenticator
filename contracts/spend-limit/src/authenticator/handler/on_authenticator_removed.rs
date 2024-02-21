@@ -18,7 +18,7 @@ pub fn on_authenticator_removed(
     // clean up the spending
     SPENDINGS.remove(
         deps.storage,
-        (&account, authenticator_params.authenticator_id.u64()),
+        (&account, authenticator_params.authenticator_id.as_str()),
     );
 
     Ok(Response::new())
@@ -50,7 +50,7 @@ mod tests {
         );
 
         // remove the spending
-        let key = (&Addr::unchecked("account"), 2);
+        let key = (&Addr::unchecked("account"), "2");
         SPENDINGS
             .save(deps.as_mut().storage, key, &Spending::default())
             .unwrap();
@@ -60,7 +60,7 @@ mod tests {
             account: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: 2u64.into(),
+                    authenticator_id: "2".to_string(),
                     limit: "1000usdc".parse().unwrap(),
                     reset_period: Period::Day,
                 })

@@ -2,7 +2,6 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    Uint64,
 };
 use cw2::set_contract_version;
 
@@ -81,9 +80,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn query_spending(
     deps: Deps,
     account: Addr,
-    authenticator_id: Uint64,
+    authenticator_id: String,
 ) -> StdResult<SpendingResponse> {
-    let spending = SPENDINGS.load(deps.storage, (&account, authenticator_id.u64()))?;
+    let spending = SPENDINGS.load(deps.storage, (&account, authenticator_id.as_str()))?;
     Ok(SpendingResponse { spending })
 }
 
@@ -94,11 +93,6 @@ pub fn query_spendings_by_account(
     let spendings = SPENDINGS
         .prefix(&account)
         .range(deps.storage, None, None, Order::Ascending)
-        .map(|spending_res| {
-            let (key, spending) = spending_res?;
-            let authenticator_id = Uint64::from(key);
-            Ok((authenticator_id, spending))
-        })
         .collect::<StdResult<Vec<_>>>()?;
     Ok(SpendingsByAccountResponse { spendings })
 }
