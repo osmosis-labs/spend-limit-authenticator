@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use cosmwasm_std::{CoinsError, StdError};
+use cosmwasm_std::{CoinsError, StdError, Timestamp};
 
 use crate::{authenticator::AuthenticatorError, price::PriceError, spend_limit::SpendLimitError};
 
@@ -21,6 +21,13 @@ pub enum ContractError {
 
     #[error("Invalid denom: {denom}")]
     InvalidDenom { denom: String },
+
+    #[error("Current time {current} not within time limit {start:?} - {end}")]
+    NotWithinTimeLimit {
+        current: Timestamp,
+        start: Option<Timestamp>,
+        end: Timestamp,
+    },
 
     #[error("Authenticator error: {0}")]
     AuthenticatorError(#[from] AuthenticatorError),

@@ -20,6 +20,6 @@ pub struct TimeLimit {
     /// Start time of the time limit, if not set, it means the time limit starts immediately
     pub start: Option<Timestamp>,
 
-    /// End time of the time limit, if not set, it means the time limit never ends
-    pub end: Option<Timestamp>,
+    /// End time of the time limit
+    pub end: Timestamp,
 }
