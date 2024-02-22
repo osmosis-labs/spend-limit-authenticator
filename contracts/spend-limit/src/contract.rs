@@ -50,6 +50,10 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
             authenticator::on_authenticator_added(deps, env, on_authenticator_added_request)
                 .map_err(ContractError::from)
         }
+        SudoMsg::OnAuthenticatorRemoved(on_authenticator_removed_request) => {
+            authenticator::on_authenticator_removed(deps, env, on_authenticator_removed_request)
+                .map_err(ContractError::from)
+        }
         SudoMsg::Authenticate(auth_request) => authenticator::authenticate(deps, env, auth_request),
         SudoMsg::Track(track_request) => {
             authenticator::track(deps, env, track_request).map_err(ContractError::from)

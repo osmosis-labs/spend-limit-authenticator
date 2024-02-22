@@ -18,6 +18,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum SudoMsg {
     OnAuthenticatorAdded(osmosis_authenticators::OnAuthenticatorAddedRequest),
+    OnAuthenticatorRemoved(osmosis_authenticators::OnAuthenticatorRemovedRequest),
     Authenticate(osmosis_authenticators::AuthenticationRequest),
     Track(osmosis_authenticators::TrackRequest),
     ConfirmExecution(osmosis_authenticators::ConfirmExecutionRequest),

@@ -6,7 +6,10 @@ use cosmwasm_std::Coin;
 
 use osmosis_std::types::{
     cosmos::bank::v1beta1::MsgSendResponse,
-    osmosis::{authenticator::TxExtension, poolmanager::v1beta1::SwapAmountInRoute},
+    osmosis::{
+        authenticator::{MsgRemoveAuthenticator, MsgRemoveAuthenticatorResponse, TxExtension},
+        poolmanager::v1beta1::SwapAmountInRoute,
+    },
 };
 use osmosis_test_tube::{
     osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, ExecuteResponse, Gamm, Module,
@@ -16,9 +19,9 @@ use time::{Duration, OffsetDateTime};
 
 use crate::{
     assert_substring,
-    msg::{InstantiateMsg, TrackedDenom},
+    msg::{InstantiateMsg, QueryMsg, SpendingsByAccountResponse, TrackedDenom},
     price::PriceResolutionConfig,
-    spend_limit::{Period, SpendLimitError, SpendLimitParams},
+    spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
     test_helper::authenticator_setup::{
         add_sigver_authenticator, add_spend_limit_authenticator, spend_limit_instantiate,
         spend_limit_store_code,
@@ -29,7 +32,7 @@ const UUSDC: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505
 const UATOM: &str = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2";
 
 #[test]
-fn test_integration_no_conversion() {
+fn test_no_conversion() {
     let app = OsmosisTestApp::new();
     let accs = app
         .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
@@ -127,7 +130,7 @@ fn test_integration_no_conversion() {
 }
 
 #[test]
-fn test_integration_with_conversion() {
+fn test_with_conversion() {
     let app = OsmosisTestApp::new();
     let accs = app
         .init_accounts(
@@ -267,7 +270,6 @@ fn test_integration_with_conversion() {
         SpendLimitError::overspend(1, 2).to_string()
     );
 
-    // TODO: test after reset
     let prev_ts = app.get_block_time_seconds() as i64;
     let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
     let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
@@ -275,15 +277,6 @@ fn test_integration_with_conversion() {
 
     app.increase_time(diff as u64);
 
-    // bank.send(
-    //     MsgSend {
-    //         from_address: accs[0].address(),
-    //         to_address: accs[1].address(),
-    //         amount: vec![Coin::new(500_000, "uosmo").into()],
-    //     },
-    //     &accs[0],
-    // )
-    // .unwrap();
     bank_send(
         &app,
         &accs[0],
@@ -312,6 +305,117 @@ fn test_integration_with_conversion() {
         err.to_string(),
         SpendLimitError::overspend(1, 2).to_string()
     );
+}
+
+#[test]
+fn test_setup_and_teardown() {
+    let app = OsmosisTestApp::new();
+    let accs = app
+        .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
+        .unwrap();
+
+    // Add signature verification authenticator
+    add_sigver_authenticator(&app, &accs[0]);
+    add_sigver_authenticator(&app, &accs[1]);
+
+    let wasm = Wasm::new(&app);
+
+    // Store code and initialize spend limit contract
+    let code_id = spend_limit_store_code(&wasm, &accs[0]);
+    let contract_addr = spend_limit_instantiate(
+        &wasm,
+        code_id,
+        &InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: "uosmo".to_string(),
+                staleness_threshold: 3_600_000_000_000u64.into(), // 1h
+                twap_duration: 3_600_000_000_000u64.into(),       // 1h
+            },
+            tracked_denoms: vec![],
+        },
+        &accs[0],
+    );
+
+    // Add spend limit authenticator
+    add_spend_limit_authenticator(
+        &app,
+        &accs[0],
+        &contract_addr,
+        &SpendLimitParams {
+            limit: Coin::new(1_000_000, "uosmo"),
+            reset_period: Period::Day,
+        },
+    );
+
+    add_spend_limit_authenticator(
+        &app,
+        &accs[0],
+        &contract_addr,
+        &SpendLimitParams {
+            limit: Coin::new(999_999, "uosmo"),
+            reset_period: Period::Day,
+        },
+    );
+
+    add_spend_limit_authenticator(
+        &app,
+        &accs[1],
+        &contract_addr,
+        &SpendLimitParams {
+            limit: Coin::new(100_000, "uosmo"),
+            reset_period: Period::Day,
+        },
+    );
+
+    let SpendingsByAccountResponse { spendings } = wasm
+        .query(
+            &contract_addr,
+            &QueryMsg::SpendingsByAccount {
+                account: accs[0].address(),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        spendings,
+        vec![
+            ("2".to_string(), Spending::default()),
+            ("3".to_string(), Spending::default()),
+        ]
+    );
+
+    let SpendingsByAccountResponse { spendings } = wasm
+        .query(
+            &contract_addr,
+            &QueryMsg::SpendingsByAccount {
+                account: accs[1].address(),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(spendings, vec![("4".to_string(), Spending::default())]);
+
+    // Remove spend limit authenticator
+    app.execute::<_, MsgRemoveAuthenticatorResponse>(
+        MsgRemoveAuthenticator {
+            sender: accs[0].address(),
+            id: 2,
+        },
+        MsgRemoveAuthenticator::TYPE_URL,
+        &accs[0],
+    )
+    .unwrap();
+
+    let SpendingsByAccountResponse { spendings } = wasm
+        .query(
+            &contract_addr,
+            &QueryMsg::SpendingsByAccount {
+                account: accs[0].address(),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(spendings, vec![("3".to_string(), Spending::default())]);
 }
 
 fn bank_send(
