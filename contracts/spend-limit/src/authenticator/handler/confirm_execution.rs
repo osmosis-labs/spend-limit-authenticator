@@ -134,6 +134,7 @@ mod tests {
 
         // Confirm the execution
         let confirm_execution_request = ConfirmExecutionRequest {
+            authenticator_id: "".to_string(),
             account: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {

@@ -19,7 +19,7 @@ pub struct CosmwasmAuthenticatorData {
     pub params: Vec<u8>,
 }
 
-pub fn add_signature_verification_authenticator(app: &OsmosisTestApp, acc: &SigningAccount) {
+pub fn add_sigver_authenticator(app: &OsmosisTestApp, acc: &SigningAccount) {
     let MsgAddAuthenticatorResponse { success } = app
         .execute(
             MsgAddAuthenticator {

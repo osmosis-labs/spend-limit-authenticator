@@ -62,6 +62,7 @@ mod tests {
         let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
 
         let track_request = TrackRequest {
+            authenticator_id: "".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
@@ -97,6 +98,7 @@ mod tests {
             .unwrap();
 
         let track_request = TrackRequest {
+            authenticator_id: "".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {

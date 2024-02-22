@@ -4,10 +4,13 @@
 
 use cosmwasm_std::Coin;
 
-use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
+use osmosis_std::types::{
+    cosmos::bank::v1beta1::MsgSendResponse,
+    osmosis::{authenticator::TxExtension, poolmanager::v1beta1::SwapAmountInRoute},
+};
 use osmosis_test_tube::{
-    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, Bank, Gamm, Module,
-    OsmosisTestApp, Wasm,
+    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, ExecuteResponse, Gamm, Module,
+    OsmosisTestApp, Runner, RunnerError, SigningAccount, Wasm,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -17,8 +20,8 @@ use crate::{
     price::PriceResolutionConfig,
     spend_limit::{Period, SpendLimitError, SpendLimitParams},
     test_helper::authenticator_setup::{
-        add_signature_verification_authenticator, add_spend_limit_authenticator,
-        spend_limit_instantiate, spend_limit_store_code,
+        add_sigver_authenticator, add_spend_limit_authenticator, spend_limit_instantiate,
+        spend_limit_store_code,
     },
 };
 
@@ -33,7 +36,7 @@ fn test_integration_no_conversion() {
         .unwrap();
 
     // Add signature verification authenticator
-    add_signature_verification_authenticator(&app, &accs[0]);
+    add_sigver_authenticator(&app, &accs[0]);
 
     let wasm = Wasm::new(&app);
 
@@ -65,27 +68,21 @@ fn test_integration_no_conversion() {
         },
     );
 
-    let bank = Bank::new(&app);
-
     // spend to the limit
-    bank.send(
-        MsgSend {
-            from_address: accs[0].address(),
-            to_address: accs[1].address(),
-            amount: vec![Coin::new(1_000_000, "uosmo").into()],
-        },
+    bank_send(
+        &app,
         &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(1_000_000, "uosmo")],
     )
     .unwrap();
 
     // spend some more
-    let res = bank.send(
-        MsgSend {
-            from_address: accs[0].address(),
-            to_address: accs[1].address(),
-            amount: vec![Coin::new(1, "uosmo").into()],
-        },
+    let res = bank_send(
+        &app,
         &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(1, "uosmo")],
     );
 
     assert_substring!(
@@ -100,36 +97,29 @@ fn test_integration_no_conversion() {
 
     app.increase_time(diff as u64);
 
-    bank.send(
-        MsgSend {
-            from_address: accs[0].address(),
-            to_address: accs[1].address(),
-            amount: vec![Coin::new(500_000, "uosmo").into()],
-        },
+    bank_send(
+        &app,
         &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(500_000, "uosmo")],
     )
     .unwrap();
 
-    bank.send(
-        MsgSend {
-            from_address: accs[0].address(),
-            to_address: accs[1].address(),
-            amount: vec![Coin::new(499_999, "uosmo").into()],
-        },
+    bank_send(
+        &app,
         &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(499_999, "uosmo")],
     )
     .unwrap();
 
-    let err = bank
-        .send(
-            MsgSend {
-                from_address: accs[0].address(),
-                to_address: accs[1].address(),
-                amount: vec![Coin::new(2, "uosmo").into()],
-            },
-            &accs[0],
-        )
-        .unwrap_err();
+    let err = bank_send(
+        &app,
+        &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(2, "uosmo")],
+    )
+    .unwrap_err();
 
     assert_substring!(
         err.to_string(),
@@ -191,7 +181,7 @@ fn test_integration_with_conversion() {
     app.increase_time(3_600u64);
 
     // Add signature verification authenticator
-    add_signature_verification_authenticator(&app, &accs[0]);
+    add_sigver_authenticator(&app, &accs[0]);
 
     let wasm = Wasm::new(&app);
 
@@ -257,27 +247,21 @@ fn test_integration_with_conversion() {
         },
     );
 
-    let bank = Bank::new(&app);
-
     // spend to the limit
-    bank.send(
-        MsgSend {
-            from_address: accs[0].address(),
-            to_address: accs[1].address(),
-            amount: vec![Coin::new(666_666, "uosmo").into()],
-        },
+    bank_send(
+        &app,
         &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(666_666, "uosmo")],
     )
     .unwrap();
 
     // spend some more
-    let res = bank.send(
-        MsgSend {
-            from_address: accs[0].address(),
-            to_address: accs[1].address(),
-            amount: vec![Coin::new(2, UUSDC).into()],
-        },
+    let res = bank_send(
+        &app,
         &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(2, UUSDC)],
     );
 
     assert_substring!(
@@ -286,12 +270,12 @@ fn test_integration_with_conversion() {
     );
 
     // TODO: test after reset
-    // let prev_ts = app.get_block_time_seconds() as i64;
-    // let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
-    // let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
-    // let diff = next_dt - prev_ts;
+    let prev_ts = app.get_block_time_seconds() as i64;
+    let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
+    let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
+    let diff = next_dt - prev_ts;
 
-    // app.increase_time(diff as u64);
+    app.increase_time(diff as u64);
 
     // bank.send(
     //     MsgSend {
@@ -302,30 +286,77 @@ fn test_integration_with_conversion() {
     //     &accs[0],
     // )
     // .unwrap();
+    bank_send(
+        &app,
+        &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(500_000, UUSDC)],
+    )
+    .unwrap();
 
-    // bank.send(
-    //     MsgSend {
-    //         from_address: accs[0].address(),
-    //         to_address: accs[1].address(),
-    //         amount: vec![Coin::new(499_999, "uosmo").into()],
-    //     },
-    //     &accs[0],
-    // )
-    // .unwrap();
+    bank_send(
+        &app,
+        &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(499_999, UUSDC)],
+    )
+    .unwrap();
 
-    // let err = bank
-    //     .send(
-    //         MsgSend {
-    //             from_address: accs[0].address(),
-    //             to_address: accs[1].address(),
-    //             amount: vec![Coin::new(2, "uosmo").into()],
-    //         },
-    //         &accs[0],
-    //     )
-    //     .unwrap_err();
+    let err = bank_send(
+        &app,
+        &accs[0],
+        &accs[1].address(),
+        vec![Coin::new(6, "uion")],
+    )
+    .unwrap_err();
 
-    // assert_substring!(
-    //     err.to_string(),
-    //     SpendLimitError::overspend(1, 2).to_string()
-    // );
+    assert_substring!(
+        err.to_string(),
+        SpendLimitError::overspend(1, 2).to_string()
+    );
+}
+
+fn bank_send(
+    app: &OsmosisTestApp,
+    from: &SigningAccount,
+    to_address: &str,
+    amount: Vec<Coin>,
+) -> Result<ExecuteResponse<MsgSendResponse>, RunnerError> {
+    let amount: Vec<osmosis_test_tube::osmosis_std::types::cosmos::base::v1beta1::Coin> =
+        amount.into_iter().map(Into::into).collect();
+
+    // a hack to set fee payer
+    let self_send_to_set_fee_payer = (
+        MsgSend {
+            from_address: from.address(),
+            to_address: from.address(),
+            amount: amount.clone(),
+        },
+        MsgSend::TYPE_URL,
+    );
+    app.execute_multiple_custom_tx::<MsgSend, MsgSendResponse>(
+        &[
+            self_send_to_set_fee_payer,
+            (
+                MsgSend {
+                    from_address: from.address(),
+                    to_address: to_address.to_string(),
+                    amount: amount,
+                },
+                MsgSend::TYPE_URL,
+            ),
+        ],
+        "",
+        0u32,
+        vec![],
+        vec![TxExtension {
+            // assuption
+            // - 1 = signature verification authenticator
+            // - 2 = spend limit authenticator
+            selected_authenticators: vec![0, 1],
+        }
+        .to_any()
+        .into()],
+        from,
+    )
 }

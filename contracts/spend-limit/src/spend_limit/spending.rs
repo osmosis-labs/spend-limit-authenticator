@@ -37,6 +37,7 @@ impl Spending {
         period: &Period,
         at: Timestamp,
     ) -> SpendLimitResult<&mut Self> {
+        // TODO: maybe rounding up is better?
         let spending_value = amount.multiply_ratio(price.numerator(), price.denominator());
 
         let value_spent_in_period = self.get_or_reset_value_spent(period, at)?;
