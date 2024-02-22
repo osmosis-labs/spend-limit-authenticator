@@ -19,6 +19,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("Invalid denom: {denom}")]
+    InvalidDenom { denom: String },
+
     #[error("Authenticator error: {0}")]
     AuthenticatorError(#[from] AuthenticatorError),
 

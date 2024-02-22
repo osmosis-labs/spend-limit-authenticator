@@ -16,17 +16,7 @@ pub fn on_authenticator_added(
         authenticator_params,
     }: OnAuthenticatorAddedRequest,
 ) -> Result<Response, AuthenticatorError> {
-    let authenticator_params = validate_and_parse_params(authenticator_params)?;
-
-    // Make sure if denom has any supply at all
-    let supply = deps
-        .querier
-        .query_supply(authenticator_params.limit.denom.as_str())?;
-
-    ensure!(
-        !supply.amount.is_zero(),
-        AuthenticatorError::invalid_denom(authenticator_params.limit.denom.as_str())
-    );
+    let _ = validate_and_parse_params(authenticator_params)?;
 
     // Make sure (account, authenticator_id) is not already present in the state
     let key = (&account, authenticator_id.as_str());
@@ -47,7 +37,7 @@ mod tests {
     use crate::spend_limit::{Period, SpendLimitParams};
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
-        to_json_binary, Addr, Coin, StdError,
+        to_json_binary, Addr, Coin, StdError, Uint128,
     };
 
     const USDC: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
@@ -82,31 +72,13 @@ mod tests {
             ))
         );
 
-        // invalid denom
-        let request = OnAuthenticatorAddedRequest {
-            authenticator_id: "2".to_string(),
-            account: Addr::unchecked("addr"),
-            authenticator_params: Some(
-                to_json_binary(&SpendLimitParams {
-                    limit: Coin::new(500__000_000, "invalid_denom"),
-                    reset_period: Period::Day,
-                })
-                .unwrap(),
-            ),
-        };
-
-        assert_eq!(
-            on_authenticator_added(deps.as_mut(), mock_env(), request).unwrap_err(),
-            AuthenticatorError::invalid_denom("invalid_denom")
-        );
-
         // valid
         let request = OnAuthenticatorAddedRequest {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: Coin::new(500__000_000, USDC),
+                    limit: Uint128::new(500_000_000),
                     reset_period: Period::Day,
                 })
                 .unwrap(),
@@ -128,7 +100,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: Coin::new(500__000_000, USDC),
+                    limit: Uint128::new(500_000_000),
                     reset_period: Period::Month,
                 })
                 .unwrap(),

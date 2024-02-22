@@ -17,9 +17,6 @@ pub enum AuthenticatorError {
         src: StdError,
     },
 
-    #[error("Invalid denom: {denom}")]
-    InvalidDenom { denom: String },
-
     #[error("Authenticator already exists for account {account} and authenticator id {authenticator_id}")]
     AuthenticatorAlreadyExists {
         account: Addr,
@@ -38,12 +35,6 @@ impl AuthenticatorError {
     pub fn dirty_pre_exec_balances(key: &SpendingKey) -> Self {
         Self::DirtyPreExecBalances {
             key: format!("{:?}", key),
-        }
-    }
-
-    pub fn invalid_denom(denom: &str) -> Self {
-        Self::InvalidDenom {
-            denom: denom.to_string(),
         }
     }
 

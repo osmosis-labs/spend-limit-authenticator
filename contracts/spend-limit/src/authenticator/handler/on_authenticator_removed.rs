@@ -45,7 +45,7 @@ mod tests {
             account: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: "1000usdc".parse().unwrap(),
+                    limit: 1000u128.into(),
                     reset_period: Period::Day,
                 })
                 .unwrap(),

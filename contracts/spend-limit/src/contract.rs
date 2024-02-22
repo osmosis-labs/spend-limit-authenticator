@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
+    ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    StdResult,
 };
 use cw2::set_contract_version;
 
@@ -24,6 +25,15 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let conf = msg.price_resolution_config;
+
+    let supply = deps.querier.query_supply(conf.quote_denom.clone())?;
+    // make sure the quote_denom has a non-zero supply
+    ensure!(
+        !supply.amount.is_zero(),
+        ContractError::InvalidDenom {
+            denom: conf.quote_denom
+        }
+    );
 
     PRICE_RESOLUTION_CONFIG.save(deps.storage, &conf)?;
 

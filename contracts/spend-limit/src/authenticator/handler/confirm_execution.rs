@@ -53,7 +53,7 @@ pub fn confirm_execution(
         match spending.spend(
             coin.amount,
             price_info.price,
-            params.limit.amount,
+            params.limit,
             &params.reset_period,
             env.block.time,
         ) {
@@ -84,7 +84,7 @@ mod tests {
     };
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
-        to_json_binary, Addr, Binary, Coin, Response,
+        to_json_binary, Addr, Binary, Coin, Response, Uint128,
     };
     use osmosis_authenticators::ConfirmExecutionRequest;
     use rstest::rstest;
@@ -139,7 +139,7 @@ mod tests {
             account: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: Coin::new(limit, "uusdc"),
+                    limit: Uint128::new(limit),
                     reset_period: Period::Day,
                 })
                 .unwrap(),

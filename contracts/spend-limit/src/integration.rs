@@ -2,7 +2,7 @@
 // and also, tarpaulin will not be able read coverage out of wasm binary anyway
 #![cfg(all(test, not(tarpaulin)))]
 
-use cosmwasm_std::Coin;
+use cosmwasm_std::{Coin, Uint128};
 
 use osmosis_std::types::{
     cosmos::bank::v1beta1::MsgSendResponse,
@@ -65,7 +65,7 @@ fn test_no_conversion() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            limit: Coin::new(1_000_000, "uosmo"),
+            limit: Uint128::new(1_000_000),
             reset_period: Period::Day,
         },
     );
@@ -243,7 +243,7 @@ fn test_with_conversion() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            limit: Coin::new(1_000_000, UUSDC),
+            limit: Uint128::new(1_000_000),
             reset_period: Period::Day,
         },
     );
@@ -342,7 +342,7 @@ fn test_setup_and_teardown() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            limit: Coin::new(1_000_000, "uosmo"),
+            limit: Uint128::new(1_000_000),
             reset_period: Period::Day,
         },
     );
@@ -352,7 +352,7 @@ fn test_setup_and_teardown() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            limit: Coin::new(999_999, "uosmo"),
+            limit: Uint128::new(999_999),
             reset_period: Period::Day,
         },
     );
@@ -362,7 +362,7 @@ fn test_setup_and_teardown() {
         &accs[1],
         &contract_addr,
         &SpendLimitParams {
-            limit: Coin::new(100_000, "uosmo"),
+            limit: Uint128::new(100_000),
             reset_period: Period::Day,
         },
     );

@@ -48,7 +48,7 @@ mod tests {
     use crate::spend_limit::{Period, SpendLimitParams};
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
-        to_json_binary, Addr, Binary, Coin,
+        to_json_binary, Addr, Binary, Coin, Uint128,
     };
     use osmosis_authenticators::TrackRequest;
 
@@ -61,7 +61,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: Coin::new(500, "usdc"),
+                    limit: Uint128::new(500_000_000),
                     reset_period: Period::Day,
                 })
                 .unwrap(),
@@ -96,7 +96,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: Coin::new(500, "usdc"),
+                    limit: Uint128::new(500),
                     reset_period: Period::Day,
                 })
                 .unwrap(),
