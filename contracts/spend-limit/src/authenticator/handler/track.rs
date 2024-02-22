@@ -63,6 +63,7 @@ mod tests {
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(500_000_000),
                     reset_period: Period::Day,
+                    time_limit: None,
                 })
                 .unwrap(),
             ),
@@ -98,6 +99,7 @@ mod tests {
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(500),
                     reset_period: Period::Day,
+                    time_limit: None,
                 })
                 .unwrap(),
             ),

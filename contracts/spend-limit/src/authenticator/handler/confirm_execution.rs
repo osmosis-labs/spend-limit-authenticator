@@ -141,6 +141,7 @@ mod tests {
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(limit),
                     reset_period: Period::Day,
+                    time_limit: None,
                 })
                 .unwrap(),
             ),

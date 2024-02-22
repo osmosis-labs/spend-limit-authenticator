@@ -67,6 +67,7 @@ fn test_no_conversion() {
         &SpendLimitParams {
             limit: Uint128::new(1_000_000),
             reset_period: Period::Day,
+            time_limit: None,
         },
     );
 
@@ -245,6 +246,7 @@ fn test_with_conversion() {
         &SpendLimitParams {
             limit: Uint128::new(1_000_000),
             reset_period: Period::Day,
+            time_limit: None,
         },
     );
 
@@ -344,6 +346,7 @@ fn test_setup_and_teardown() {
         &SpendLimitParams {
             limit: Uint128::new(1_000_000),
             reset_period: Period::Day,
+            time_limit: None,
         },
     );
 
@@ -354,6 +357,7 @@ fn test_setup_and_teardown() {
         &SpendLimitParams {
             limit: Uint128::new(999_999),
             reset_period: Period::Day,
+            time_limit: None,
         },
     );
 
@@ -364,6 +368,7 @@ fn test_setup_and_teardown() {
         &SpendLimitParams {
             limit: Uint128::new(100_000),
             reset_period: Period::Day,
+            time_limit: None,
         },
     );
 
