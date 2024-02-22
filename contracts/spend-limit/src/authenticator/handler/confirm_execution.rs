@@ -13,6 +13,7 @@ pub fn confirm_execution(
     mut deps: DepsMut,
     env: Env,
     ConfirmExecutionRequest {
+        authenticator_id,
         account,
         authenticator_params,
         ..
@@ -20,7 +21,7 @@ pub fn confirm_execution(
 ) -> Result<Response, ContractError> {
     let params: SpendLimitParams = validate_and_parse_params(authenticator_params)?;
 
-    let spend_limit_key = (&account, params.authenticator_id.as_str());
+    let spend_limit_key = (&account, authenticator_id.as_str());
 
     // get the pre_exec balance for this key
     let pre_exec_balances = PRE_EXEC_BALANCES.load(deps.storage, spend_limit_key)?;
@@ -134,11 +135,10 @@ mod tests {
 
         // Confirm the execution
         let confirm_execution_request = ConfirmExecutionRequest {
-            authenticator_id: "".to_string(),
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: "2".to_string(),
                     limit: Coin::new(limit, "uusdc"),
                     reset_period: Period::Day,
                 })

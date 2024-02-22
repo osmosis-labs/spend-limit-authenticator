@@ -11,6 +11,7 @@ pub fn on_authenticator_added(
     deps: DepsMut,
     _env: Env,
     OnAuthenticatorAddedRequest {
+        authenticator_id,
         account,
         authenticator_params,
     }: OnAuthenticatorAddedRequest,
@@ -28,13 +29,10 @@ pub fn on_authenticator_added(
     );
 
     // Make sure (account, authenticator_id) is not already present in the state
-    let key = (&account, authenticator_params.authenticator_id.as_str());
+    let key = (&account, authenticator_id.as_str());
     ensure!(
         !SPENDINGS.has(deps.storage, key),
-        AuthenticatorError::authenticator_already_exists(
-            account,
-            authenticator_params.authenticator_id.as_str()
-        )
+        AuthenticatorError::authenticator_already_exists(account, authenticator_id.as_str())
     );
 
     // initialize the spending for this authenticator
@@ -60,6 +58,7 @@ mod tests {
 
         // missing authenticator_params
         let request = OnAuthenticatorAddedRequest {
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: None,
         };
@@ -70,6 +69,7 @@ mod tests {
 
         // invalid authenticator_params
         let request = OnAuthenticatorAddedRequest {
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(to_json_binary(&"invalid").unwrap()),
         };
@@ -84,10 +84,10 @@ mod tests {
 
         // invalid denom
         let request = OnAuthenticatorAddedRequest {
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500__000_000, "invalid_denom"),
                     reset_period: Period::Day,
                 })
@@ -102,10 +102,10 @@ mod tests {
 
         // valid
         let request = OnAuthenticatorAddedRequest {
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500__000_000, USDC),
                     reset_period: Period::Day,
                 })
@@ -124,10 +124,10 @@ mod tests {
 
         // Adding the authenticator with the same (account, authenticator_id) should fail
         let request = OnAuthenticatorAddedRequest {
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500__000_000, USDC),
                     reset_period: Period::Month,
                 })

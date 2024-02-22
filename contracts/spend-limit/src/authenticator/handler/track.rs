@@ -2,8 +2,7 @@ use cosmwasm_std::{ensure, Addr, DepsMut, Env, Response};
 
 use osmosis_authenticators::TrackRequest;
 
-use crate::authenticator::handler::validate_and_parse_params;
-use crate::{spend_limit::SpendLimitParams, state::PRE_EXEC_BALANCES};
+use crate::state::PRE_EXEC_BALANCES;
 
 use crate::authenticator::error::{AuthenticatorError, AuthenticatorResult};
 
@@ -12,15 +11,11 @@ pub fn track(
     _env: Env,
     TrackRequest {
         account,
-        authenticator_params,
+        authenticator_id,
         ..
     }: TrackRequest,
 ) -> AuthenticatorResult<Response> {
-    let SpendLimitParams {
-        authenticator_id, ..
-    } = validate_and_parse_params(authenticator_params)?;
     update_pre_exec_balance(deps, &account, authenticator_id.as_str())?;
-
     Ok(Response::new())
 }
 
@@ -62,11 +57,10 @@ mod tests {
         let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
 
         let track_request = TrackRequest {
-            authenticator_id: "".to_string(),
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500, "usdc"),
                     reset_period: Period::Day,
                 })
@@ -98,11 +92,10 @@ mod tests {
             .unwrap();
 
         let track_request = TrackRequest {
-            authenticator_id: "".to_string(),
+            authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    authenticator_id: "2".to_string(),
                     limit: Coin::new(500, "usdc"),
                     reset_period: Period::Day,
                 })

@@ -62,7 +62,6 @@ fn test_integration_no_conversion() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            authenticator_id: "2".to_string(),
             limit: Coin::new(1_000_000, "uosmo"),
             reset_period: Period::Day,
         },
@@ -241,7 +240,6 @@ fn test_integration_with_conversion() {
         &accs[0],
         &contract_addr,
         &SpendLimitParams {
-            authenticator_id: "2".to_string(),
             limit: Coin::new(1_000_000, UUSDC),
             reset_period: Period::Day,
         },
@@ -341,7 +339,7 @@ fn bank_send(
                 MsgSend {
                     from_address: from.address(),
                     to_address: to_address.to_string(),
-                    amount: amount,
+                    amount,
                 },
                 MsgSend::TYPE_URL,
             ),
