@@ -1,5 +1,5 @@
 use cosmwasm_std::{DepsMut, Env, Response, Timestamp};
-use osmosis_authenticators::{AuthenticationRequest, AuthenticationResult};
+use osmosis_authenticators::AuthenticationRequest;
 
 use crate::ContractError;
 
@@ -27,7 +27,7 @@ pub fn authenticate(
         }
     }
 
-    Ok(Response::new().set_data(AuthenticationResult::Authenticated))
+    Ok(Response::new())
 }
 
 #[cfg(test)]
@@ -78,6 +78,7 @@ mod tests {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
+            msg_index: 0,
             signature: Binary::default(),
             sign_mode_tx_data: SignModeTxData {
                 sign_mode_direct: Binary::default(),
@@ -105,10 +106,7 @@ mod tests {
         let response = authenticate(deps.as_mut(), env.clone(), request);
 
         if expected {
-            assert_eq!(
-                response.unwrap(),
-                Response::new().set_data(AuthenticationResult::Authenticated)
-            );
+            response.expect("expected authenticated");
         } else {
             let TimeLimit { start, end } = time_limit.unwrap();
             assert_eq!(

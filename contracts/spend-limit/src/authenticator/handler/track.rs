@@ -71,6 +71,7 @@ mod tests {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
+            msg_index: 0,
         };
 
         let response = track(deps.as_mut(), mock_env(), track_request).unwrap();
@@ -107,6 +108,7 @@ mod tests {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
+            msg_index: 0,
         };
 
         let err = track(deps.as_mut(), mock_env(), track_request).unwrap_err();

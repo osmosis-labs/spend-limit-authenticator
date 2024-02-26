@@ -1,8 +1,8 @@
 use cosmwasm_std::{DepsMut, Env, Response};
-use osmosis_authenticators::{ConfirmExecutionRequest, ConfirmationResult};
+use osmosis_authenticators::ConfirmExecutionRequest;
 
 use crate::price::get_and_cache_price;
-use crate::spend_limit::{calculate_spent_coins, SpendLimitError, SpendLimitParams};
+use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
 
 use crate::state::{PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
@@ -50,20 +50,13 @@ pub fn confirm_execution(
             continue;
         };
 
-        match spending.spend(
+        spending.spend(
             coin.amount,
             price_info.price,
             params.limit,
             &params.reset_period,
             env.block.time,
-        ) {
-            Err(overspent @ SpendLimitError::Overspend { .. }) => {
-                return Ok(Response::new().set_data(ConfirmationResult::Block {
-                    msg: overspent.to_string(),
-                }));
-            }
-            otherwise => otherwise?,
-        };
+        )?;
     }
 
     // save the updated spending
@@ -72,7 +65,7 @@ pub fn confirm_execution(
     // clean up the pre_exec balance
     PRE_EXEC_BALANCES.remove(deps.storage, spend_limit_key);
 
-    Ok(Response::new().set_data(ConfirmationResult::Confirm {}))
+    Ok(Response::new())
 }
 
 #[cfg(test)]
@@ -80,7 +73,7 @@ mod tests {
     use super::*;
     use crate::{
         price::PriceResolutionConfig,
-        spend_limit::{Period, SpendLimitParams, Spending},
+        spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
     };
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
@@ -90,13 +83,13 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case::spend_at_limit(1000, 500, 500, ConfirmationResult::Confirm {})]
-    #[case::spend_over_limit(1000, 500, 501, ConfirmationResult::Block { msg: SpendLimitError::overspend(500, 501).to_string() })]
+    #[case::spend_at_limit(1000, 500, 500, Ok(Response::new()))]
+    #[case::spend_over_limit(1000, 500, 501, Err(SpendLimitError::overspend(500, 501).into()))]
     fn test_confirm_execution_only_spends_quoted_denom(
         #[case] initial_balance: u128,
         #[case] limit: u128,
         #[case] spent: u128,
-        #[case] expected: ConfirmationResult,
+        #[case] expected: Result<Response, ContractError>,
     ) {
         let fixed_balance = Coin::new(500, "uosmo");
         // Setup the environment
@@ -149,15 +142,13 @@ mod tests {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
+            msg_index: 0,
         };
 
         let res = confirm_execution(deps.as_mut(), mock_env(), confirm_execution_request);
         match expected {
-            ConfirmationResult::Confirm {} => {
-                assert_eq!(
-                    res.unwrap(),
-                    Response::new().set_data(ConfirmationResult::Confirm {})
-                );
+            Ok(expected_res) => {
+                assert_eq!(res.unwrap(), expected_res);
 
                 // Verify that the spending is updated correctly
                 let spending = SPENDINGS.load(deps.as_ref().storage, key).unwrap();
@@ -169,12 +160,8 @@ mod tests {
                     }
                 );
             }
-            ConfirmationResult::Block { msg } => {
-                let res = res.unwrap();
-                assert_eq!(
-                    res,
-                    Response::new().set_data(ConfirmationResult::Block { msg })
-                );
+            Err(expected_err) => {
+                assert_eq!(res.unwrap_err(), expected_err);
             }
         }
     }
