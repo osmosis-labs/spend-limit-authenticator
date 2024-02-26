@@ -122,7 +122,8 @@ pub fn query_spendings_by_account(
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{
-        testing::{mock_dependencies_with_balances, mock_env, mock_info},
+        from_json,
+        testing::{mock_dependencies, mock_dependencies_with_balances, mock_env, mock_info},
         Coin, Uint128, Uint64,
     };
     use osmosis_authenticators::{
@@ -257,12 +258,19 @@ mod tests {
         .unwrap();
 
         // query spending
-        let spending = query_spending(
-            deps.as_ref(),
-            Addr::unchecked("limited_account"),
-            "2".to_string(),
+        let spending = from_json::<SpendingResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::Spending {
+                    account: "limited_account".to_string(),
+                    authenticator_id: "2".to_string(),
+                },
+            )
+            .unwrap(),
         )
         .unwrap();
+
         assert_eq!(
             spending,
             SpendingResponse {
@@ -274,8 +282,17 @@ mod tests {
         );
 
         // query spendings by account
-        let spendings =
-            query_spendings_by_account(deps.as_ref(), Addr::unchecked("limited_account")).unwrap();
+        let spendings = from_json::<SpendingsByAccountResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::SpendingsByAccount {
+                    account: "limited_account".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             spendings,
             SpendingsByAccountResponse {
@@ -302,10 +319,13 @@ mod tests {
         .unwrap();
 
         // query spending
-        let err = query_spending(
+        let err = query(
             deps.as_ref(),
-            Addr::unchecked("limited_account"),
-            "2".to_string(),
+            mock_env(),
+            QueryMsg::Spending {
+                account: "limited_account".to_string(),
+                authenticator_id: "2".to_string(),
+            },
         )
         .unwrap_err();
 
@@ -319,8 +339,39 @@ mod tests {
         );
 
         // query spendings by account
-        let spendings =
-            query_spendings_by_account(deps.as_ref(), Addr::unchecked("limited_account")).unwrap();
+        let spendings = from_json::<SpendingsByAccountResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::SpendingsByAccount {
+                    account: "limited_account".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(spendings, SpendingsByAccountResponse { spendings: vec![] });
+    }
+
+    #[test]
+    fn test_invalid_denom() {
+        let mut deps = mock_dependencies();
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: "uinvalid".to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![],
+        };
+        let info = mock_info("creator", &[]);
+        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(
+            res,
+            ContractError::InvalidDenom {
+                denom: "uinvalid".to_string()
+            }
+            .into()
+        );
     }
 }
