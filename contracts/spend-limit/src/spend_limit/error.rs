@@ -1,5 +1,5 @@
 use super::period::PeriodError;
-use cosmwasm_std::{OverflowError, Uint128};
+use cosmwasm_std::{Addr, OverflowError, Uint128};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -9,6 +9,12 @@ pub enum SpendLimitError {
 
     #[error("Period error: {0}")]
     PeriodError(#[from] PeriodError),
+
+    #[error("Spend limit not found for account {address} and authenticator {authenticator_id}")]
+    SpendLimitNotFound {
+        address: Addr,
+        authenticator_id: String,
+    },
 
     #[error("Accumulating spent value error: {0}")]
     AccumulatingSpentValueError(#[from] OverflowError),

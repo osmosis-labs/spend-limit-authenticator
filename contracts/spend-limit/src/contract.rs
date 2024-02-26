@@ -9,6 +9,7 @@ use cw2::set_contract_version;
 use crate::authenticator;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
 use crate::price::track_denom;
+use crate::spend_limit::SpendLimitError;
 use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
 
@@ -75,7 +76,7 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
         QueryMsg::Spending {
             account,
@@ -89,24 +90,237 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_json_binary(&query_spendings_by_account(deps, account)?)
         }
     }
+    .map_err(ContractError::from)
 }
 
 pub fn query_spending(
     deps: Deps,
     account: Addr,
     authenticator_id: String,
-) -> StdResult<SpendingResponse> {
-    let spending = SPENDINGS.load(deps.storage, (&account, authenticator_id.as_str()))?;
-    Ok(SpendingResponse { spending })
+) -> Result<SpendingResponse, ContractError> {
+    match SPENDINGS.may_load(deps.storage, (&account, authenticator_id.as_str()))? {
+        Some(spending) => Ok(SpendingResponse { spending }),
+        None => Err(SpendLimitError::SpendLimitNotFound {
+            address: account,
+            authenticator_id: authenticator_id,
+        }
+        .into()),
+    }
 }
 
 pub fn query_spendings_by_account(
     deps: Deps,
     account: Addr,
-) -> StdResult<SpendingsByAccountResponse> {
+) -> Result<SpendingsByAccountResponse, ContractError> {
     let spendings = SPENDINGS
         .prefix(&account)
         .range(deps.storage, None, None, Order::Ascending)
         .collect::<StdResult<Vec<_>>>()?;
     Ok(SpendingsByAccountResponse { spendings })
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{
+        testing::{mock_dependencies_with_balances, mock_env, mock_info},
+        Coin, Uint128, Uint64,
+    };
+    use osmosis_authenticators::{
+        Any, AuthenticationRequest, ConfirmExecutionRequest, OnAuthenticatorAddedRequest,
+        OnAuthenticatorRemovedRequest, SignModeTxData, SignatureData, TrackRequest, TxData,
+    };
+    use osmosis_std::types::cosmos::bank::v1beta1::MsgSend;
+
+    use crate::{
+        price::PriceResolutionConfig,
+        spend_limit::{Period, SpendLimitParams, Spending},
+    };
+
+    use super::*;
+
+    const UUSDC: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
+
+    #[test]
+    fn test_happy_path() {
+        let mut deps = mock_dependencies_with_balances(&[
+            (&"creator".to_string(), &[Coin::new(1000, UUSDC)]),
+            (
+                &"limited_account".to_string(),
+                &[Coin::new(2_000_000, UUSDC)],
+            ),
+            (&"recipient".to_string(), &[]),
+        ]);
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: UUSDC.to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![],
+        };
+        let info = mock_info("creator", &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let authenticator_params = to_json_binary(&SpendLimitParams {
+            limit: Uint128::from(1_000_000u128),
+            reset_period: Period::Day,
+            time_limit: None,
+        })
+        .unwrap();
+
+        // add authenticator
+        sudo(
+            deps.as_mut(),
+            mock_env(),
+            SudoMsg::OnAuthenticatorAdded(OnAuthenticatorAddedRequest {
+                account: Addr::unchecked("limited_account"),
+                authenticator_id: "2".to_string(),
+                authenticator_params: Some(authenticator_params.clone()),
+            }),
+        )
+        .unwrap();
+
+        let msg = Any {
+            type_url: MsgSend::TYPE_URL.to_string(),
+            value: Binary::from(
+                MsgSend {
+                    from_address: "limited_account".to_string(),
+                    to_address: "recipient".to_string(),
+                    amount: vec![Coin::new(1_000_000, UUSDC).into()],
+                }
+                .to_proto_bytes(),
+            ),
+        };
+
+        // authenticate
+        sudo(
+            deps.as_mut(),
+            mock_env(),
+            SudoMsg::Authenticate(AuthenticationRequest {
+                authenticator_id: "2".to_string(),
+                account: Addr::unchecked("limited_account"),
+                msg: msg.clone(),
+                msg_index: 0,
+                signature: Binary::default(),
+                sign_mode_tx_data: SignModeTxData {
+                    sign_mode_direct: Binary::default(),
+                    sign_mode_textual: None,
+                },
+                tx_data: TxData {
+                    chain_id: "osmosis-1".to_string(),
+                    account_number: 0,
+                    sequence: 0,
+                    timeout_height: 0,
+                    msgs: vec![],
+                    memo: "".to_string(),
+                },
+                signature_data: SignatureData {
+                    signers: vec![],
+                    signatures: vec![],
+                },
+                simulate: false,
+                authenticator_params: Some(authenticator_params.clone()),
+            }),
+        )
+        .unwrap();
+
+        // track
+        sudo(
+            deps.as_mut(),
+            mock_env(),
+            SudoMsg::Track(TrackRequest {
+                account: Addr::unchecked("limited_account"),
+                authenticator_id: "2".to_string(),
+                msg: msg.clone(),
+                msg_index: 0,
+                authenticator_params: Some(authenticator_params.clone()),
+            }),
+        )
+        .unwrap();
+
+        // simulate execute bank send
+        deps.querier
+            .update_balance("limited_account", vec![Coin::new(1_000_001, UUSDC).into()]);
+
+        // confirm execution
+        sudo(
+            deps.as_mut(),
+            mock_env(),
+            SudoMsg::ConfirmExecution(ConfirmExecutionRequest {
+                authenticator_id: "2".to_string(),
+                account: Addr::unchecked("limited_account"),
+                msg: msg.clone(),
+                msg_index: 0,
+                authenticator_params: Some(authenticator_params.clone()),
+            }),
+        )
+        .unwrap();
+
+        // query spending
+        let spending = query_spending(
+            deps.as_ref(),
+            Addr::unchecked("limited_account"),
+            "2".to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            spending,
+            SpendingResponse {
+                spending: Spending {
+                    value_spent_in_period: Uint128::from(999_999u128),
+                    last_spent_at: mock_env().block.time
+                }
+            }
+        );
+
+        // query spendings by account
+        let spendings =
+            query_spendings_by_account(deps.as_ref(), Addr::unchecked("limited_account")).unwrap();
+        assert_eq!(
+            spendings,
+            SpendingsByAccountResponse {
+                spendings: vec![(
+                    "2".to_string(),
+                    Spending {
+                        value_spent_in_period: Uint128::from(999_999u128),
+                        last_spent_at: mock_env().block.time
+                    }
+                )]
+            }
+        );
+
+        // remove authenticator
+        sudo(
+            deps.as_mut(),
+            mock_env(),
+            SudoMsg::OnAuthenticatorRemoved(OnAuthenticatorRemovedRequest {
+                account: Addr::unchecked("limited_account"),
+                authenticator_id: "2".to_string(),
+                authenticator_params: Some(authenticator_params),
+            }),
+        )
+        .unwrap();
+
+        // query spending
+        let err = query_spending(
+            deps.as_ref(),
+            Addr::unchecked("limited_account"),
+            "2".to_string(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            SpendLimitError::SpendLimitNotFound {
+                address: Addr::unchecked("limited_account"),
+                authenticator_id: "2".to_string(),
+            }
+            .into()
+        );
+
+        // query spendings by account
+        let spendings =
+            query_spendings_by_account(deps.as_ref(), Addr::unchecked("limited_account")).unwrap();
+        assert_eq!(spendings, SpendingsByAccountResponse { spendings: vec![] });
+    }
 }
