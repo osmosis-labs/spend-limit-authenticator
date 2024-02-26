@@ -1,4 +1,4 @@
-use cosmwasm_std::{OverflowError, Uint64};
+use cosmwasm_std::{OverflowError, Timestamp, Uint64};
 use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use thiserror::Error;
@@ -22,6 +22,16 @@ pub enum PriceError {
         current_block_time: Uint64,
         last_updated_time: Uint64,
     },
+
+    #[error(
+        "Twap query error: can't get twap price for {base_denom}:{quote_denom} from pool {pool_id}, starting from {start_time} to now"
+    )]
+    TwapQueryError {
+        pool_id: u64,
+        base_denom: String,
+        quote_denom: String,
+        start_time: Timestamp,
+    },
 }
 
 impl PriceError {
@@ -32,6 +42,20 @@ impl PriceError {
         PriceError::CurrentBlockTimeBehindLastUpdate {
             current_block_time: current_block_time.into(),
             last_updated_time: last_updated_time.into(),
+        }
+    }
+
+    pub fn twap_query_error(
+        pool_id: u64,
+        base_denom: &str,
+        quote_denom: &str,
+        start_time: Timestamp,
+    ) -> Self {
+        PriceError::TwapQueryError {
+            pool_id,
+            base_denom: base_denom.to_string(),
+            quote_denom: quote_denom.to_string(),
+            start_time,
         }
     }
 }

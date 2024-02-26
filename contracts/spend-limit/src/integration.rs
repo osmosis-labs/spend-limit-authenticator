@@ -20,7 +20,7 @@ use time::{Duration, OffsetDateTime};
 use crate::{
     assert_substring,
     msg::{InstantiateMsg, QueryMsg, SpendingsByAccountResponse, TrackedDenom},
-    price::PriceResolutionConfig,
+    price::{PriceError, PriceResolutionConfig},
     spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
     test_helper::authenticator_setup::{
         add_sigver_authenticator, add_spend_limit_authenticator, spend_limit_instantiate,
@@ -170,6 +170,16 @@ fn test_with_conversion() {
         .data
         .pool_id;
 
+    // 4:1
+    let ion_atom_pool_id = gamm
+        .create_basic_pool(
+            &[Coin::new(4_000_000, "uion"), Coin::new(1_000_000, UATOM)],
+            &accs[0],
+        )
+        .unwrap()
+        .data
+        .pool_id;
+
     // 1:1
     let atom_osmo_pool_id = gamm
         .create_basic_pool(
@@ -190,6 +200,55 @@ fn test_with_conversion() {
 
     // Store code and initialize spend limit contract
     let code_id = spend_limit_store_code(&wasm, &accs[0]);
+
+    // try instantiate with incorrect routes
+    let now = app.get_block_timestamp();
+    let start_time = now.minus_nanos(3_600_000_000_000u64);
+    let err = wasm
+        .instantiate(
+            code_id,
+            &InstantiateMsg {
+                price_resolution_config: PriceResolutionConfig {
+                    quote_denom: UUSDC.to_string(),
+                    staleness_threshold: 3_600_000_000_000u64.into(), // 1h
+                    twap_duration: 3_600_000_000_000u64.into(),       // 1h
+                },
+                tracked_denoms: vec![
+                    TrackedDenom {
+                        denom: "uosmo".to_string(),
+                        swap_routes: vec![SwapAmountInRoute {
+                            pool_id: osmo_usdc_pool_id,
+                            token_out_denom: UUSDC.to_string(),
+                        }],
+                    },
+                    // incorrect
+                    TrackedDenom {
+                        denom: "uion".to_string(),
+                        swap_routes: vec![
+                            SwapAmountInRoute {
+                                pool_id: ion_atom_pool_id,
+                                token_out_denom: UATOM.to_string(),
+                            },
+                            SwapAmountInRoute {
+                                pool_id: osmo_usdc_pool_id,
+                                token_out_denom: UUSDC.to_string(),
+                            },
+                        ],
+                    },
+                ],
+            },
+            None,
+            Some("spend_limit_authenticator"),
+            &[],
+            &accs[0],
+        )
+        .unwrap_err();
+
+    assert_substring!(
+        err.to_string(),
+        PriceError::twap_query_error(osmo_usdc_pool_id, UATOM, UUSDC, start_time).to_string()
+    );
+
     let contract_addr = spend_limit_instantiate(
         &wasm,
         code_id,

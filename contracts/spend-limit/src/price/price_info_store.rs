@@ -83,7 +83,8 @@ fn fetch_twap_price(
     // so price will never remain 1 implicitly
     let mut price = Decimal::one();
 
-    let start_time = to_proto_timestamp(block_time.minus_nanos(conf.twap_duration.u64()));
+    let start_time = block_time.minus_nanos(conf.twap_duration.u64());
+    let proto_start_time = to_proto_timestamp(start_time);
     let mut base_denom = base_denom.to_string();
 
     for route in swap_routes.iter() {
@@ -92,10 +93,16 @@ fn fetch_twap_price(
         let arithmetic_twap = TwapQuerier::new(&deps.querier)
             .arithmetic_twap_to_now(
                 pool_id,
-                base_denom,
+                base_denom.clone(),
                 route.token_out_denom.clone(),
-                Some(start_time.clone()),
-            )?
+                Some(proto_start_time.clone()),
+            )
+            .map_err(|_| PriceError::twap_query_error(
+                pool_id,
+                base_denom.as_str(),
+                route.token_out_denom.as_str(),
+                start_time,
+            ))?
             .arithmetic_twap;
 
         price = price.checked_mul(arithmetic_twap.parse()?)?;
@@ -116,7 +123,6 @@ fn to_proto_timestamp(timestamp: Timestamp) -> ProtoTimestamp {
     }
 }
 
-// TODO: check the remaining paths? only if twap does not check that
 fn valid_swap_routes(swap_routes: &[SwapAmountInRoute], quote_denom: &str) -> bool {
     if let Some(last_swap_route) = swap_routes.last() {
         last_swap_route.token_out_denom == quote_denom
