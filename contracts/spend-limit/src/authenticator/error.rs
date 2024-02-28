@@ -1,8 +1,6 @@
 use cosmwasm_std::{Addr, StdError};
 use thiserror::Error;
 
-use crate::spend_limit::SpendingKey;
-
 #[derive(Error, Debug, PartialEq)]
 pub enum AuthenticatorError {
     #[error("{0}")]
@@ -22,20 +20,11 @@ pub enum AuthenticatorError {
         account: Addr,
         authenticator_id: String,
     },
-
-    #[error("PreExec balances already exists for this key: {key}")]
-    DirtyPreExecBalances { key: String },
 }
 
 impl AuthenticatorError {
     pub fn invalid_authenticator_params(src: impl Into<StdError>) -> Self {
         Self::InvalidAuthenticatorParams { src: src.into() }
-    }
-
-    pub fn dirty_pre_exec_balances(key: &SpendingKey) -> Self {
-        Self::DirtyPreExecBalances {
-            key: format!("{:?}", key),
-        }
     }
 
     pub fn authenticator_already_exists(account: Addr, authenticator_id: &str) -> Self {

@@ -1,10 +1,10 @@
-use cosmwasm_std::{ensure, Addr, DepsMut, Env, Response};
+use cosmwasm_std::{Addr, DepsMut, Env, Response};
 
 use osmosis_authenticators::TrackRequest;
 
 use crate::state::PRE_EXEC_BALANCES;
 
-use crate::authenticator::error::{AuthenticatorError, AuthenticatorResult};
+use crate::authenticator::error::AuthenticatorResult;
 
 pub fn track(
     deps: DepsMut,
@@ -29,11 +29,6 @@ fn update_pre_exec_balance(
 
     // make sure the pre-exec balance is cleaned up
     let key = (account, authenticator_id);
-    let no_dirty_pre_exec_balance = !PRE_EXEC_BALANCES.has(deps.storage, key);
-    ensure!(
-        no_dirty_pre_exec_balance,
-        AuthenticatorError::dirty_pre_exec_balances(&key)
-    );
 
     // save the updated pre_exec balance
     PRE_EXEC_BALANCES.save(deps.storage, key, &balances)?;
@@ -84,11 +79,12 @@ mod tests {
     }
 
     #[test]
-    fn test_track_failure_dirty_pre_exec_balance() {
+    fn test_track_success_with_dirty_pre_exec_balance() {
         let mut deps = mock_dependencies_with_balances(&[("addr", &[Coin::new(1000, "usdc")])]);
 
-        // Simulate existing pre-exec balance to trigger failure
         let key = (&Addr::unchecked("addr"), "2");
+
+        // make sure the pre-exec balance dirty
         PRE_EXEC_BALANCES
             .save(deps.as_mut().storage, key, &vec![Coin::new(500, "usdc")])
             .unwrap();
@@ -98,7 +94,7 @@ mod tests {
             account: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
-                    limit: Uint128::new(500),
+                    limit: Uint128::new(500_000_000),
                     reset_period: Period::Day,
                     time_limit: None,
                 })
@@ -111,7 +107,11 @@ mod tests {
             msg_index: 0,
         };
 
-        let err = track(deps.as_mut(), mock_env(), track_request).unwrap_err();
-        assert_eq!(err, AuthenticatorError::dirty_pre_exec_balances(&key));
+        let response = track(deps.as_mut(), mock_env(), track_request).unwrap();
+        assert_eq!(response, Response::new());
+
+        // Verify that the pre_exec_balance is updated
+        let pre_exec_balance = PRE_EXEC_BALANCES.load(deps.as_ref().storage, key).unwrap();
+        assert_eq!(pre_exec_balance, vec![Coin::new(1000, "usdc")]);
     }
 }
