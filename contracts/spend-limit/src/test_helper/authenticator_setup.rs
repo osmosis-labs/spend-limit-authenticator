@@ -19,6 +19,12 @@ pub struct CosmwasmAuthenticatorData {
     pub params: Vec<u8>,
 }
 
+#[cw_serde]
+pub struct AllOfAuthenticatorData {
+    pub authenticator_type: String,
+    pub data: Vec<u8>,
+}
+
 pub fn add_sigver_authenticator(app: &OsmosisTestApp, acc: &SigningAccount) {
     let MsgAddAuthenticatorResponse { success } = app
         .execute(
@@ -78,16 +84,21 @@ pub fn add_spend_limit_authenticator<'a>(
     contract: &str,
     params: &SpendLimitParams,
 ) {
-    let data = CosmwasmAuthenticatorData {
+    let cosmwasm_data = CosmwasmAuthenticatorData {
         contract: contract.to_string(),
         params: to_json_binary(params).unwrap().to_vec(),
     };
+
+    let data = vec![AllOfAuthenticatorData {
+        authenticator_type: "CosmwasmAuthenticatorV1".to_string(),
+        data: to_json_binary(&cosmwasm_data).unwrap().to_vec(),
+    }];
 
     let MsgAddAuthenticatorResponse { success } = app
         .execute(
             MsgAddAuthenticator {
                 sender: acc.address(),
-                r#type: "CosmwasmAuthenticatorV1".to_string(),
+                r#type: "AllOfAuthenticator".to_string(),
                 data: to_json_binary(&data).unwrap().to_vec(),
             },
             MsgAddAuthenticator::TYPE_URL,
