@@ -443,8 +443,8 @@ fn test_setup_and_teardown() {
     assert_eq!(
         spendings,
         vec![
-            ("2.0".to_string(), Spending::default()),
-            ("3.0".to_string(), Spending::default()),
+            ("2.1".to_string(), Spending::default()),
+            ("3.1".to_string(), Spending::default()),
         ]
     );
 
@@ -457,7 +457,7 @@ fn test_setup_and_teardown() {
         )
         .unwrap();
 
-    assert_eq!(spendings, vec![("4.0".to_string(), Spending::default())]);
+    assert_eq!(spendings, vec![("4.1".to_string(), Spending::default())]);
 
     // Remove spend limit authenticator
     app.execute::<_, MsgRemoveAuthenticatorResponse>(
@@ -479,7 +479,7 @@ fn test_setup_and_teardown() {
         )
         .unwrap();
 
-    assert_eq!(spendings, vec![("3.0".to_string(), Spending::default())]);
+    assert_eq!(spendings, vec![("3.1".to_string(), Spending::default())]);
 }
 
 fn bank_send(

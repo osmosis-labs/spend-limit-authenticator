@@ -89,10 +89,16 @@ pub fn add_spend_limit_authenticator<'a>(
         params: to_json_binary(params).unwrap().to_vec(),
     };
 
-    let data = vec![AllOfAuthenticatorData {
-        authenticator_type: "CosmwasmAuthenticatorV1".to_string(),
-        data: to_json_binary(&cosmwasm_data).unwrap().to_vec(),
-    }];
+    let data = vec![
+        AllOfAuthenticatorData {
+            authenticator_type: "SignatureVerificationAuthenticator".to_string(),
+            data: acc.public_key().to_bytes(),
+        },
+        AllOfAuthenticatorData {
+            authenticator_type: "CosmwasmAuthenticatorV1".to_string(),
+            data: to_json_binary(&cosmwasm_data).unwrap().to_vec(),
+        },
+    ];
 
     let MsgAddAuthenticatorResponse { success } = app
         .execute(
