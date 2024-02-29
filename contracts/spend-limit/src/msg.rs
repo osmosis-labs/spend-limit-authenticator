@@ -3,6 +3,9 @@ use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::{price::PriceResolutionConfig, spend_limit::Spending};
 
+// re-export the structs from osmosis_authenticators
+pub use osmosis_authenticators::AuthenticatorSudoMsg as SudoMsg;
+
 #[cw_serde]
 pub struct TrackedDenom {
     pub denom: String,
@@ -13,15 +16,6 @@ pub struct TrackedDenom {
 pub struct InstantiateMsg {
     pub price_resolution_config: PriceResolutionConfig,
     pub tracked_denoms: Vec<TrackedDenom>,
-}
-
-#[cw_serde]
-pub enum SudoMsg {
-    OnAuthenticatorAdded(osmosis_authenticators::OnAuthenticatorAddedRequest),
-    OnAuthenticatorRemoved(osmosis_authenticators::OnAuthenticatorRemovedRequest),
-    Authenticate(osmosis_authenticators::AuthenticationRequest),
-    Track(osmosis_authenticators::TrackRequest),
-    ConfirmExecution(osmosis_authenticators::ConfirmExecutionRequest),
 }
 
 #[cw_serde]
