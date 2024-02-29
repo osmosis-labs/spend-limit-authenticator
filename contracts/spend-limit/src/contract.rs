@@ -102,7 +102,7 @@ pub fn query_spending(
         Some(spending) => Ok(SpendingResponse { spending }),
         None => Err(SpendLimitError::SpendLimitNotFound {
             address: account,
-            authenticator_id: authenticator_id,
+            authenticator_id,
         }
         .into()),
     }
@@ -200,6 +200,7 @@ mod tests {
             SudoMsg::Authenticate(AuthenticationRequest {
                 authenticator_id: "2".to_string(),
                 account: Addr::unchecked("limited_account"),
+                fee_payer: Addr::unchecked("limited_account"),
                 msg: msg.clone(),
                 msg_index: 0,
                 signature: Binary::default(),
@@ -231,6 +232,7 @@ mod tests {
             mock_env(),
             SudoMsg::Track(TrackRequest {
                 account: Addr::unchecked("limited_account"),
+                fee_payer: Addr::unchecked("limited_account"),
                 authenticator_id: "2".to_string(),
                 msg: msg.clone(),
                 msg_index: 0,
@@ -250,6 +252,7 @@ mod tests {
             SudoMsg::ConfirmExecution(ConfirmExecutionRequest {
                 authenticator_id: "2".to_string(),
                 account: Addr::unchecked("limited_account"),
+                fee_payer: Addr::unchecked("limited_account"),
                 msg: msg.clone(),
                 msg_index: 0,
                 authenticator_params: Some(authenticator_params.clone()),

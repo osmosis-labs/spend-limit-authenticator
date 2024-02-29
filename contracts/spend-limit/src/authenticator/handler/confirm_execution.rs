@@ -130,6 +130,7 @@ mod tests {
         let confirm_execution_request = ConfirmExecutionRequest {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("account"),
+            fee_payer: Addr::unchecked("account"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(limit),

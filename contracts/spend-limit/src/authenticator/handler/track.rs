@@ -54,6 +54,7 @@ mod tests {
         let track_request = TrackRequest {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
+            fee_payer: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(500_000_000),
@@ -92,6 +93,7 @@ mod tests {
         let track_request = TrackRequest {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
+            fee_payer: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(500_000_000),

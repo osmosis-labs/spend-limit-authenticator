@@ -66,6 +66,7 @@ mod tests {
         let request = AuthenticationRequest {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
+            fee_payer: Addr::unchecked("addr"),
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: 1000u128.into(),
