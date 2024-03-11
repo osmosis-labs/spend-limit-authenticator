@@ -23,8 +23,7 @@ use crate::{
     price::{PriceError, PriceResolutionConfig},
     spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
     test_helper::authenticator_setup::{
-        add_sigver_authenticator, add_spend_limit_authenticator, spend_limit_instantiate,
-        spend_limit_store_code,
+        add_spend_limit_authenticator, spend_limit_instantiate, spend_limit_store_code,
     },
 };
 
@@ -37,9 +36,6 @@ fn test_no_conversion() {
     let accs = app
         .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
         .unwrap();
-
-    // Add signature verification authenticator
-    add_sigver_authenticator(&app, &accs[0]);
 
     let wasm = Wasm::new(&app);
 
@@ -60,7 +56,7 @@ fn test_no_conversion() {
     );
 
     // Add spend limit authenticator
-    add_spend_limit_authenticator(
+    let spend_limit_auth_id = add_spend_limit_authenticator(
         &app,
         &accs[0],
         &contract_addr,
@@ -77,6 +73,7 @@ fn test_no_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(1_000_000, "uosmo")],
+        spend_limit_auth_id,
     )
     .unwrap();
 
@@ -86,6 +83,7 @@ fn test_no_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(1, "uosmo")],
+        spend_limit_auth_id,
     );
 
     assert_substring!(
@@ -105,6 +103,7 @@ fn test_no_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(500_000, "uosmo")],
+        spend_limit_auth_id,
     )
     .unwrap();
 
@@ -113,6 +112,7 @@ fn test_no_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(499_999, "uosmo")],
+        spend_limit_auth_id,
     )
     .unwrap();
 
@@ -121,6 +121,7 @@ fn test_no_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(2, "uosmo")],
+        spend_limit_auth_id,
     )
     .unwrap_err();
 
@@ -192,9 +193,6 @@ fn test_with_conversion() {
 
     // increase time by 1h
     app.increase_time(3_600u64);
-
-    // Add signature verification authenticator
-    add_sigver_authenticator(&app, &accs[0]);
 
     let wasm = Wasm::new(&app);
 
@@ -298,7 +296,7 @@ fn test_with_conversion() {
     );
 
     // Add spend limit authenticator
-    add_spend_limit_authenticator(
+    let spend_limit_auth_id = add_spend_limit_authenticator(
         &app,
         &accs[0],
         &contract_addr,
@@ -315,6 +313,7 @@ fn test_with_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(666_666, "uosmo")],
+        spend_limit_auth_id,
     )
     .unwrap();
 
@@ -324,6 +323,7 @@ fn test_with_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(2, UUSDC)],
+        spend_limit_auth_id,
     );
 
     assert_substring!(
@@ -343,6 +343,7 @@ fn test_with_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(500_000, UUSDC)],
+        spend_limit_auth_id,
     )
     .unwrap();
 
@@ -351,6 +352,7 @@ fn test_with_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(499_999, UUSDC)],
+        spend_limit_auth_id,
     )
     .unwrap();
 
@@ -359,6 +361,7 @@ fn test_with_conversion() {
         &accs[0],
         &accs[1].address(),
         vec![Coin::new(6, "uion")],
+        spend_limit_auth_id,
     )
     .unwrap_err();
 
@@ -374,10 +377,6 @@ fn test_setup_and_teardown() {
     let accs = app
         .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
         .unwrap();
-
-    // Add signature verification authenticator
-    add_sigver_authenticator(&app, &accs[0]);
-    add_sigver_authenticator(&app, &accs[1]);
 
     let wasm = Wasm::new(&app);
 
@@ -443,8 +442,8 @@ fn test_setup_and_teardown() {
     assert_eq!(
         spendings,
         vec![
+            ("1.1".to_string(), Spending::default()),
             ("2.1".to_string(), Spending::default()),
-            ("3.1".to_string(), Spending::default()),
         ]
     );
 
@@ -457,13 +456,13 @@ fn test_setup_and_teardown() {
         )
         .unwrap();
 
-    assert_eq!(spendings, vec![("4.1".to_string(), Spending::default())]);
+    assert_eq!(spendings, vec![("3.1".to_string(), Spending::default())]);
 
     // Remove spend limit authenticator
     app.execute::<_, MsgRemoveAuthenticatorResponse>(
         MsgRemoveAuthenticator {
             sender: accs[0].address(),
-            id: 2,
+            id: 1,
         },
         MsgRemoveAuthenticator::TYPE_URL,
         &accs[0],
@@ -479,7 +478,7 @@ fn test_setup_and_teardown() {
         )
         .unwrap();
 
-    assert_eq!(spendings, vec![("3.1".to_string(), Spending::default())]);
+    assert_eq!(spendings, vec![("2.1".to_string(), Spending::default())]);
 }
 
 fn bank_send(
@@ -487,6 +486,7 @@ fn bank_send(
     from: &SigningAccount,
     to_address: &str,
     amount: Vec<Coin>,
+    authenticator_id: u64,
 ) -> Result<ExecuteResponse<MsgSendResponse>, RunnerError> {
     let amount: Vec<osmosis_test_tube::osmosis_std::types::cosmos::base::v1beta1::Coin> =
         amount.into_iter().map(Into::into).collect();
@@ -516,10 +516,9 @@ fn bank_send(
         0u32,
         vec![],
         vec![TxExtension {
-            // assuption
-            // - 1 = signature verification authenticator
-            // - 2 = spend limit authenticator
-            selected_authenticators: vec![0, 1],
+            // 0 is default authenticator, which is sigver for first signer
+            // it will authenticate that as fee payer
+            selected_authenticators: vec![0, authenticator_id as i32],
         }
         .to_any()
         .into()],

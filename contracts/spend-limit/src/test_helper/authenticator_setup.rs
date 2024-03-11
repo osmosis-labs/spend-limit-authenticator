@@ -83,7 +83,7 @@ pub fn add_spend_limit_authenticator<'a>(
     acc: &SigningAccount,
     contract: &str,
     params: &SpendLimitParams,
-) {
+) -> u64 {
     let cosmwasm_data = CosmwasmAuthenticatorData {
         contract: contract.to_string(),
         params: to_json_binary(params).unwrap().to_vec(),
@@ -100,8 +100,8 @@ pub fn add_spend_limit_authenticator<'a>(
         },
     ];
 
-    let MsgAddAuthenticatorResponse { success } = app
-        .execute(
+    let id = app
+        .execute::<_, MsgAddAuthenticatorResponse>(
             MsgAddAuthenticator {
                 sender: acc.address(),
                 r#type: "AllOfAuthenticator".to_string(),
@@ -111,7 +111,22 @@ pub fn add_spend_limit_authenticator<'a>(
             acc,
         )
         .unwrap()
-        .data;
+        .events
+        .into_iter()
+        .find(|e| {
+            e.ty == "message"
+                && e.attributes
+                    .iter()
+                    .any(|a| a.key == "module" && a.value == "authenticator")
+        })
+        .unwrap()
+        .attributes
+        .into_iter()
+        .find(|a| a.key == "authenticator_id")
+        .unwrap()
+        .value
+        .parse::<u64>()
+        .unwrap();
 
-    assert!(success);
+    return id;
 }
