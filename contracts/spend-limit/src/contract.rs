@@ -93,6 +93,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     .map_err(ContractError::from)
 }
 
+// TODO: check period, if has changed, reset value_spent_in_period to 0
 pub fn query_spending(
     deps: Deps,
     account: Addr,
