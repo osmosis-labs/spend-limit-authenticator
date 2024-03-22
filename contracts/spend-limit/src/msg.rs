@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
+pub use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::{price::PriceResolutionConfig, spend_limit::Spending};
 

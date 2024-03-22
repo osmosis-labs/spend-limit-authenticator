@@ -1,6 +1,7 @@
 [workspace]
 members = [
   'contracts/*',
+  "prep-instantiate",
 ]
 resolver = "2"
 
