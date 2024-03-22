@@ -8,6 +8,7 @@ error_chain! {
         Io(std::io::Error);
         HttpRequest(reqwest::Error);
         Json(serde_json::Error);
+        Toml(toml::de::Error);
     }
 }
 
@@ -19,21 +20,17 @@ use spend_limit::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let price_resolution_config = PriceResolutionConfig {
-        quote_denom: "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4"
-            .to_string(),
-        staleness_threshold: 3_600_000_000_000u64.into(),
-        twap_duration: 3_600_000_000_000u64.into(),
-    };
+    let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
     let mut tracked_denoms = vec![];
 
-    for denom in vec!["uosmo"] {
+    for denom in conf.tracked_denoms.iter() {
+        let amount = conf.routing_amount_in.parse().unwrap(); // TODO: handle error
         let route = TrackedDenom {
             denom: denom.to_string(),
             swap_routes: get_route(
-                Token::new(5000000000, denom),
-                &price_resolution_config.quote_denom,
+                Token::new(amount, denom),
+                &conf.price_resolution.quote_denom,
             )
             .await?,
         };
@@ -41,7 +38,7 @@ async fn main() -> Result<()> {
     }
 
     let msg = InstantiateMsg {
-        price_resolution_config,
+        price_resolution_config: conf.price_resolution,
         tracked_denoms,
     };
 
@@ -50,6 +47,18 @@ async fn main() -> Result<()> {
     println!("{}", msg_str);
 
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Config {
+    /// The price resolution config used directly in the instantiate msg
+    price_resolution: PriceResolutionConfig,
+
+    /// The amount of token to calculate route via sqs
+    routing_amount_in: String,
+
+    /// The denoms to track, used for calculating route via sqs
+    tracked_denoms: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,7 +120,12 @@ async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<SwapAmo
 
     let res = reqwest::get(&url).await?;
     let txt = res.text().await?;
-    let response: RouterResponse = serde_json::from_str(&txt)?;
+    let response: RouterResponse = serde_json::from_str(&txt).map_err(|e| {
+        format!(
+            "Failed to parse response from sqs: {}. Response: {}",
+            e, txt
+        )
+    })?;
 
     // get route with the best out amount
     let route = response
