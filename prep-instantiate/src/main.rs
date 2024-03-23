@@ -1,4 +1,6 @@
+use futures::StreamExt;
 use std::fmt::Display;
+use tokio::task::JoinHandle;
 
 use error_chain::error_chain;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -9,6 +11,7 @@ error_chain! {
         HttpRequest(reqwest::Error);
         Json(serde_json::Error);
         Toml(toml::de::Error);
+        JoinError(tokio::task::JoinError);
     }
 }
 
@@ -22,20 +25,31 @@ use spend_limit::{
 async fn main() -> Result<()> {
     let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-    let mut tracked_denoms = vec![];
+    let tracked_denoms =
+        futures::stream::iter(conf.tracked_denoms.clone().into_iter().map(|denom| {
+            // TODO: handle error > unwrap
+            let conf = conf.clone();
+            let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
+                let amount = conf.routing_amount_in.parse().unwrap();
+                let swap_routes = get_route(
+                    Token::new(amount, denom.as_str()),
+                    &conf.price_resolution.quote_denom,
+                )
+                .await
+                .unwrap();
 
-    for denom in conf.tracked_denoms.iter() {
-        let amount = conf.routing_amount_in.parse().unwrap(); // TODO: handle error
-        let route = TrackedDenom {
-            denom: denom.to_string(),
-            swap_routes: get_route(
-                Token::new(amount, denom),
-                &conf.price_resolution.quote_denom,
-            )
-            .await?,
-        };
-        tracked_denoms.push(route);
-    }
+                TrackedDenom {
+                    denom: denom.to_string(),
+                    swap_routes,
+                }
+            });
+
+            handle
+        }))
+        .buffer_unordered(10)
+        .map(|handle| handle.unwrap()) // TODO: handle error > unwrap
+        .collect::<Vec<_>>()
+        .await;
 
     let msg = InstantiateMsg {
         price_resolution_config: conf.price_resolution,
@@ -49,7 +63,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Config {
     /// The price resolution config used directly in the instantiate msg
     price_resolution: PriceResolutionConfig,
