@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use cosmwasm_std::Decimal;
+use cosmwasm_std::{Decimal, Decimal256, Fraction};
 use futures::StreamExt;
 use prep_instantiate::{get_route, get_tokens, Config, Result, Token, TokenInfo};
 use serde::Serialize;
@@ -119,21 +119,32 @@ async fn get_tracked_denom_infos(
 
         // out * quote_price = in * denom_price
         // in = out * (quote_price / denom_price)
+        let out_factor = if denom_info.exponent > quote_denom_info.exponent {
+            to_decimal(quote_denom_info.price) / to_decimal(denom_info.price)
+                * Decimal::from_ratio(
+                    10u128.pow(denom_info.exponent - quote_denom_info.exponent),
+                    1u128,
+                )
+        } else {
+            to_decimal(quote_denom_info.price)
+                / to_decimal(denom_info.price)
+                / Decimal::from_ratio(
+                    10u128.pow(quote_denom_info.exponent - denom_info.exponent),
+                    1u128,
+                )
+        };
 
-        // TODO: handle overflow
-        let out_factor = (to_decimal(quote_denom_info.price) / to_decimal(denom_info.price))
-            * Decimal::from_ratio(
-                10u128.pow(denom_info.exponent - quote_denom_info.exponent),
-                1u128,
-            );
+        let out_factor = Decimal256::from_ratio(out_factor.numerator(), out_factor.denominator());
 
-        let routing_amount_in = (Decimal::from_ratio(routing_amount_out, 1u128) * out_factor)
-            .to_uint_ceil()
-            .u128();
+        let routing_amount_in =
+            (Decimal256::from_ratio(routing_amount_out, 1u128) * out_factor).to_uint_ceil();
 
         let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
             let swap_routes = get_route(
-                Token::new(routing_amount_in, denom.as_str()),
+                Token {
+                    amount: routing_amount_in.to_string(),
+                    denom: denom.to_string(),
+                },
                 qoute_denom.as_str(),
             )
             .await

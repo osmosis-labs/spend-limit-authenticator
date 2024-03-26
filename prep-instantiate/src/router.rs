@@ -16,18 +16,10 @@ struct RouterResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Token {
-    denom: String,
-    amount: String,
+    pub denom: String,
+    pub amount: String,
 }
 
-impl Token {
-    pub fn new(amount: u128, denom: &str) -> Self {
-        Self {
-            amount: amount.to_string(),
-            denom: denom.to_string(),
-        }
-    }
-}
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.amount, self.denom)
