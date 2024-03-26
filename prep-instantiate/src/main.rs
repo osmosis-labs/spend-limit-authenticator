@@ -27,16 +27,18 @@ async fn main() -> Result<()> {
 
     let tracked_denoms =
         futures::stream::iter(conf.tracked_denoms.clone().into_iter().map(|denom| {
-            // TODO: handle error > unwrap
             let conf = conf.clone();
             let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
-                let amount = conf.routing_amount_in.parse().unwrap();
+                let amount = conf
+                    .routing_amount_in
+                    .parse()
+                    .expect("Invalid amount, requires u128");
                 let swap_routes = get_route(
                     Token::new(amount, denom.as_str()),
                     &conf.price_resolution.quote_denom,
                 )
                 .await
-                .unwrap();
+                .expect("Failed to get route");
 
                 TrackedDenom {
                     denom: denom.to_string(),
@@ -47,7 +49,7 @@ async fn main() -> Result<()> {
             handle
         }))
         .buffer_unordered(10)
-        .map(|handle| handle.unwrap()) // TODO: handle error > unwrap
+        .map(|handle| handle.expect("Failed to join handle"))
         .collect::<Vec<_>>()
         .await;
 
