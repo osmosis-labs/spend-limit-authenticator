@@ -1,20 +1,75 @@
+use clap::{Parser, Subcommand, ValueEnum};
 use futures::StreamExt;
-use prep_instantiate::{get_route, Config, Result, Token};
+use prep_instantiate::{get_route, get_tokens, Config, Result, Token, TokenInfo};
+use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, TrackedDenom};
 use tokio::task::JoinHandle;
 
+/// Prepare instantiate msg for spend-limit contract
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Number of concurrent requests to make to get route
+    #[arg(long, default_value_t = 10)]
+    concurrency: usize,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// List tokens in the format that is easiliy copy-pastable to config.toml
+    ListTokens {
+        /// Sort tokens by
+        #[arg(long)]
+        sort_by: SortBy,
+
+        /// Include all infos for each token
+        #[arg(long, short, default_value_t = false)]
+        verbose: bool,
+    },
+}
+
+#[derive(ValueEnum, Debug, Default, Serialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum SortBy {
+    #[default]
+    Volume24h,
+    Liquidity,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
+
+    // list tokens
+    if let Some(Commands::ListTokens { sort_by, verbose }) = args.command {
+        get_tokens_sorted_by_24h_volume(sort_by)
+            .await
+            .iter()
+            .for_each(|token| {
+                print!("\"{}\", # {} - {}", token.denom, token.symbol, token.name);
+                if verbose {
+                    print!(
+                        " (volume_24h = {}, liquidity = {})",
+                        token.volume_24h, token.liquidity
+                    );
+                }
+                println!();
+            });
+
+        return Ok(());
+    }
+
     let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-    let concurrent_request_count = 10;
     let tracked_denoms = get_tracked_denom_infos(
         conf.tracked_denoms.clone(),
         conf.routing_amount_in
             .parse()
             .expect("Failed to parse routing amount in as u128"),
         &conf.price_resolution.quote_denom,
-        concurrent_request_count,
+        args.concurrency,
     )
     .await;
 
@@ -30,11 +85,22 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+async fn get_tokens_sorted_by_24h_volume(sort_by: SortBy) -> Vec<TokenInfo> {
+    let mut tokens = get_tokens().await.expect("Failed to get tokens");
+
+    match sort_by {
+        SortBy::Volume24h => tokens.sort_by(|a, b| b.volume_24h.total_cmp(&a.volume_24h)),
+        SortBy::Liquidity => tokens.sort_by(|a, b| b.liquidity.total_cmp(&a.liquidity)),
+    }
+
+    tokens
+}
+
 async fn get_tracked_denom_infos(
     denoms: Vec<String>,
     routing_amount_in: u128,
     qoute_denom: &str,
-    buffer_size: usize,
+    concurrency: usize,
 ) -> Vec<TrackedDenom> {
     futures::stream::iter(denoms.into_iter().map(|denom| {
         let qoute_denom = qoute_denom.to_string();
@@ -54,7 +120,7 @@ async fn get_tracked_denom_infos(
 
         handle
     }))
-    .buffer_unordered(buffer_size)
+    .buffer_unordered(concurrency)
     .map(|handle| handle.expect("Failed to join handle"))
     .collect::<Vec<_>>()
     .await
