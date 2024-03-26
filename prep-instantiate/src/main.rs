@@ -119,6 +119,8 @@ async fn get_tracked_denom_infos(
 
         // out * quote_price = in * denom_price
         // in = out * (quote_price / denom_price)
+
+        // TODO: handle overflow
         let out_factor = (to_decimal(quote_denom_info.price) / to_decimal(denom_info.price))
             * Decimal::from_ratio(
                 10u128.pow(denom_info.exponent - quote_denom_info.exponent),
