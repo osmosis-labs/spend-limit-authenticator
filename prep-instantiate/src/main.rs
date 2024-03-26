@@ -9,15 +9,19 @@ use tokio::task::JoinHandle;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Number of concurrent requests to make to get route
-    #[arg(long, default_value_t = 10)]
-    concurrency: usize,
-
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 }
+
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Generate instantiate msg for spend-limit contract
+    GenMsg {
+        /// Number of concurrent requests to make to get route
+        #[arg(long, default_value_t = 10)]
+        concurrency: usize,
+    },
+
     /// List tokens in the format that is easiliy copy-pastable to config.toml
     ListTokens {
         /// Sort tokens by
@@ -42,45 +46,45 @@ enum SortBy {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // list tokens
-    if let Some(Commands::ListTokens { sort_by, verbose }) = args.command {
-        get_tokens_sorted_by_24h_volume(sort_by)
-            .await
-            .iter()
-            .for_each(|token| {
-                print!("\"{}\", # {} - {}", token.denom, token.symbol, token.name);
-                if verbose {
-                    print!(
-                        " (volume_24h = {}, liquidity = {})",
-                        token.volume_24h, token.liquidity
-                    );
-                }
-                println!();
-            });
+    match args.command {
+        Commands::GenMsg { concurrency } => {
+            let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-        return Ok(());
+            let tracked_denoms = get_tracked_denom_infos(
+                conf.tracked_denoms.clone(),
+                conf.routing_amount_in
+                    .parse()
+                    .expect("Failed to parse routing amount in as u128"),
+                &conf.price_resolution.quote_denom,
+                concurrency,
+            )
+            .await;
+
+            let msg = InstantiateMsg {
+                price_resolution_config: conf.price_resolution,
+                tracked_denoms,
+            };
+
+            // write instantiate msg to stdout
+            let msg_str = serde_json::to_string(&msg)?;
+            println!("{}", msg_str);
+        }
+        Commands::ListTokens { sort_by, verbose } => {
+            get_tokens_sorted_by_24h_volume(sort_by)
+                .await
+                .iter()
+                .for_each(|token| {
+                    print!("\"{}\", # {} - {}", token.denom, token.symbol, token.name);
+                    if verbose {
+                        print!(
+                            " (volume_24h = {}, liquidity = {})",
+                            token.volume_24h, token.liquidity
+                        );
+                    }
+                    println!();
+                });
+        }
     }
-
-    let conf: Config = toml::from_str(include_str!("../config.toml"))?;
-
-    let tracked_denoms = get_tracked_denom_infos(
-        conf.tracked_denoms.clone(),
-        conf.routing_amount_in
-            .parse()
-            .expect("Failed to parse routing amount in as u128"),
-        &conf.price_resolution.quote_denom,
-        args.concurrency,
-    )
-    .await;
-
-    let msg = InstantiateMsg {
-        price_resolution_config: conf.price_resolution,
-        tracked_denoms,
-    };
-
-    // write instantiate msg to stdout
-    let msg_str = serde_json::to_string(&msg)?;
-    println!("{}", msg_str);
 
     Ok(())
 }
