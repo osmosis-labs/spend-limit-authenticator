@@ -1,8 +1,10 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use cosmwasm_std::Decimal;
 use futures::StreamExt;
 use prep_instantiate::{get_route, get_tokens, Config, Result, Token, TokenInfo};
 use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, TrackedDenom};
+use std::collections::BTreeMap;
 use tokio::task::JoinHandle;
 
 /// Prepare instantiate msg for spend-limit contract
@@ -52,7 +54,7 @@ async fn main() -> Result<()> {
 
             let tracked_denoms = get_tracked_denom_infos(
                 conf.tracked_denoms.clone(),
-                conf.routing_amount_in
+                conf.routing_amount_out
                     .parse()
                     .expect("Failed to parse routing amount in as u128"),
                 &conf.price_resolution.quote_denom,
@@ -102,12 +104,31 @@ async fn get_tokens_sorted_by_24h_volume(sort_by: SortBy) -> Vec<TokenInfo> {
 
 async fn get_tracked_denom_infos(
     denoms: Vec<String>,
-    routing_amount_in: u128,
+    routing_amount_out: u128,
     qoute_denom: &str,
     concurrency: usize,
 ) -> Vec<TrackedDenom> {
+    let token_map = get_token_map().await.expect("Failed to get prices");
+    let quote_denom_info = token_map
+        .get(qoute_denom)
+        .expect("Failed to get quote denom info");
+
     futures::stream::iter(denoms.into_iter().map(|denom| {
         let qoute_denom = qoute_denom.to_string();
+        let denom_info = token_map.get(&denom).expect("Failed to get denom info");
+
+        // out * quote_price = in * denom_price
+        // in = out * (quote_price / denom_price)
+        let out_factor = (to_decimal(quote_denom_info.price) / to_decimal(denom_info.price))
+            * Decimal::from_ratio(
+                10u128.pow(denom_info.exponent - quote_denom_info.exponent),
+                1u128,
+            );
+
+        let routing_amount_in = (Decimal::from_ratio(routing_amount_out, 1u128) * out_factor)
+            .to_uint_ceil()
+            .u128();
+
         let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
             let swap_routes = get_route(
                 Token::new(routing_amount_in, denom.as_str()),
@@ -128,4 +149,18 @@ async fn get_tracked_denom_infos(
     .map(|handle| handle.expect("Failed to join handle"))
     .collect::<Vec<_>>()
     .await
+}
+
+async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
+    let tokens = get_tokens().await?;
+    let prices = tokens
+        .into_iter()
+        .map(|token| (token.denom.clone(), token))
+        .collect::<BTreeMap<_, _>>();
+
+    Ok(prices)
+}
+
+fn to_decimal(value: f64) -> Decimal {
+    value.to_string().parse().expect("Failed to parse decimal")
 }

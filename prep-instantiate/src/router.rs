@@ -65,8 +65,8 @@ pub async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<Swa
     let txt = res.text().await?;
     let response: RouterResponse = serde_json::from_str(&txt).map_err(|e| {
         format!(
-            "Failed to parse response from sqs: {}. Response: {}",
-            e, txt
+            "Failed to parse response from sqs: {}. Denom: {}, Response: {}",
+            e, token_in.denom, txt
         )
     })?;
 
