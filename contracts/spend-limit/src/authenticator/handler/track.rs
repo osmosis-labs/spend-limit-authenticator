@@ -16,7 +16,7 @@ pub fn track(
     }: TrackRequest,
 ) -> AuthenticatorResult<Response> {
     update_pre_exec_balance(deps, &account, authenticator_id.as_str())?;
-    Ok(Response::new())
+    Ok(Response::new().add_attribute("action", "track"))
 }
 
 fn update_pre_exec_balance(
@@ -71,7 +71,7 @@ mod tests {
         };
 
         let response = track(deps.as_mut(), mock_env(), track_request).unwrap();
-        assert_eq!(response, Response::new());
+        assert_eq!(response, Response::new().add_attribute("action", "track"));
 
         // Verify that the pre_exec_balance is updated
         let key = (&Addr::unchecked("addr"), "2");
@@ -110,7 +110,7 @@ mod tests {
         };
 
         let response = track(deps.as_mut(), mock_env(), track_request).unwrap();
-        assert_eq!(response, Response::new());
+        assert_eq!(response, Response::new().add_attribute("action", "track"));
 
         // Verify that the pre_exec_balance is updated
         let pre_exec_balance = PRE_EXEC_BALANCES.load(deps.as_ref().storage, key).unwrap();

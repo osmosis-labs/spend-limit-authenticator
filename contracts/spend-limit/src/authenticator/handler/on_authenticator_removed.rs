@@ -15,7 +15,7 @@ pub fn on_authenticator_removed(
     // clean up the spending
     SPENDINGS.remove(deps.storage, (&account, authenticator_id.as_str()));
 
-    Ok(Response::new())
+    Ok(Response::new().add_attribute("action", "on_authenticator_removed"))
 }
 
 #[cfg(test)]

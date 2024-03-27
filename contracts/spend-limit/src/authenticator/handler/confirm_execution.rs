@@ -65,7 +65,10 @@ pub fn confirm_execution(
     // clean up the pre_exec balance
     PRE_EXEC_BALANCES.remove(deps.storage, spend_limit_key);
 
-    Ok(Response::new())
+    Ok(Response::new()
+        .add_attribute("action", "confirm_execution")
+        .add_attribute("spent", spending.value_spent_in_period)
+        .add_attribute("limit", params.limit))
 }
 
 #[cfg(test)]
@@ -83,7 +86,11 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case::spend_at_limit(1000, 500, 500, Ok(Response::new()))]
+    #[case::spend_at_limit(1000, 500, 500, Ok(Response::new()
+        .add_attribute("action", "confirm_execution")
+        .add_attribute("spent", spent.to_string())
+        .add_attribute("limit", limit.to_string())
+    ))]
     #[case::spend_over_limit(1000, 500, 501, Err(SpendLimitError::overspend(500, 501).into()))]
     fn test_confirm_execution_only_spends_quoted_denom(
         #[case] initial_balance: u128,

@@ -28,7 +28,7 @@ pub fn on_authenticator_added(
     // initialize the spending for this authenticator
     SPENDINGS.save(deps.storage, key, &Spending::default())?;
 
-    Ok(Response::new())
+    Ok(Response::new().add_attribute("action", "on_authenticator_added"))
 }
 
 #[cfg(test)]
@@ -87,7 +87,10 @@ mod tests {
         };
 
         let res = on_authenticator_added(deps.as_mut(), mock_env(), request).unwrap();
-        assert_eq!(res, Response::new());
+        assert_eq!(
+            res,
+            Response::new().add_attribute("action", "on_authenticator_added")
+        );
 
         // check the state
         let spending = SPENDINGS

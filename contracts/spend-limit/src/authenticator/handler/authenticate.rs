@@ -27,7 +27,7 @@ pub fn authenticate(
         }
     }
 
-    Ok(Response::new())
+    Ok(Response::new().add_attribute("action", "authenticate"))
 }
 
 #[cfg(test)]
