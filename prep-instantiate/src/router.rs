@@ -74,7 +74,13 @@ impl From<u8> for PoolType {
     }
 }
 
-pub async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<SwapAmountInRoute>> {
+pub async fn get_route(
+    token_in: Token,
+    token_out_denom: &str,
+    latest_sycned_pool: Option<u64>,
+) -> Result<Vec<SwapAmountInRoute>> {
+    // TODO: use `/router/route` instead of `/router/qoute`.
+    // blocked by: https://linear.app/osmosis/issue/STABI-41/[bug]-403-on-routerroutes
     let url = format!(
         "https://sqsprod.osmosis.zone/router/quote?tokenIn={}&tokenOutDenom={}",
         utf8_percent_encode(token_in.to_string().as_str(), NON_ALPHANUMERIC),
@@ -96,22 +102,17 @@ pub async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<Swa
         .iter()
         // filter out the pool with the CW pool since it's not twap-able
         .filter(|r| {
-            let res = !r.has_cw_pool;
+            let has_cw_pool = r
+                .pools
+                .iter()
+                .any(|pool| pool.pool_type == PoolType::CosmWasm as u8);
 
-            if !res {
-                eprintln!("Route contains cw-pool which can't get twap price:");
-                eprintln!("  - {}", token_in.denom);
-                for pool in &r.pools {
-                    eprintln!(
-                        "  - [{} ~ {:?}] -> {}",
-                        pool.id,
-                        PoolType::from(pool.pool_type),
-                        pool.token_out_denom
-                    );
-                }
-            }
+            // check wheter in non-mainnet, there is any pool that is not yet synced
+            let has_unsycned_pool = latest_sycned_pool
+                .map(|latest| r.pools.iter().any(|pool| pool.id > latest))
+                .unwrap_or(false);
 
-            res
+            !has_cw_pool && !has_unsycned_pool
         })
         // mininum hops route leads to cheaper twap cost
         .min_by(|a, b| a.pools.len().cmp(&b.pools.len()));

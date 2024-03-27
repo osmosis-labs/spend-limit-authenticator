@@ -20,8 +20,14 @@ enum Commands {
     /// Generate instantiate msg for spend-limit contract
     GenMsg {
         /// Number of concurrent requests to make to get route
-        #[arg(long, default_value_t = 10)]
+        #[arg(long, default_value_t = 20)]
         concurrency: usize,
+
+        /// Filtering out tracked denoms that its route contains newer pool
+        /// than latest pool that gets synced from mainnet.
+        /// This is only used for setting up test environment.
+        #[arg(long)]
+        latest_synced_pool: Option<u64>,
     },
 
     /// List tokens in the format that is easiliy copy-pastable to config.toml
@@ -49,7 +55,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::GenMsg { concurrency } => {
+        Commands::GenMsg {
+            concurrency,
+            latest_synced_pool,
+        } => {
             let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
             let tracked_denoms = get_tracked_denom_infos(
@@ -59,6 +68,7 @@ async fn main() -> Result<()> {
                     .expect("Failed to parse routing amount in as u128"),
                 &conf.price_resolution.quote_denom,
                 concurrency,
+                latest_synced_pool,
             )
             .await;
 
@@ -107,6 +117,7 @@ async fn get_tracked_denom_infos(
     routing_amount_out: u128,
     qoute_denom: &str,
     concurrency: usize,
+    latest_synced_pool: Option<u64>,
 ) -> Vec<TrackedDenom> {
     let token_map = get_token_map().await.expect("Failed to get prices");
     let quote_denom_info = token_map
@@ -146,6 +157,7 @@ async fn get_tracked_denom_infos(
                     denom: denom.to_string(),
                 },
                 qoute_denom.as_str(),
+                latest_synced_pool
             )
             .await
             .expect("Failed to get route");
@@ -164,12 +176,10 @@ async fn get_tracked_denom_infos(
 
         if res.swap_routes.is_empty() {
             eprintln!(
-                "⚠️ Can't automatically resolve twap-able route for denom: `{}`, please manually set the route or remove it from the config",
-                res.denom
+                "⚠️ Can't automatically resolve twap-able route for denom: `{}` [`{}`], please manually set the route or remove it from the config",
+                res.denom, token_map[&res.denom].symbol
             );
-            eprintln!("");
-            eprintln!("---");
-            eprintln!("");
+
             return None;
         }
 
