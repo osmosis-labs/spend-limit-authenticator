@@ -159,7 +159,22 @@ async fn get_tracked_denom_infos(
         handle
     }))
     .buffer_unordered(concurrency)
-    .map(|handle| handle.expect("Failed to join handle"))
+    .filter_map(|handle| async {
+        let res = handle.expect("Failed to join handle");
+
+        if res.swap_routes.is_empty() {
+            eprintln!(
+                "⚠️ Can't automatically resolve twap-able route for denom: `{}`, please manually set the route or remove it from the config",
+                res.denom
+            );
+            eprintln!("");
+            eprintln!("---");
+            eprintln!("");
+            return None;
+        }
+
+        Some(res)
+    })
     .collect::<Vec<_>>()
     .await
 }
