@@ -94,6 +94,7 @@ pub async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<Swa
     let route = response
         .route
         .iter()
+        // filter out the pool with the CW pool since it's not twap-able
         .filter(|r| {
             let res = !r.has_cw_pool;
 
@@ -111,13 +112,9 @@ pub async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<Swa
             }
 
             res
-        }) // filter out the pool with the CW pool since it's not twap-able
-        .max_by(|a, b| {
-            a.out_amount
-                .parse::<u128>()
-                .unwrap()
-                .cmp(&b.out_amount.parse::<u128>().unwrap())
-        });
+        })
+        // mininum hops route leads to cheaper twap cost
+        .min_by(|a, b| a.pools.len().cmp(&b.pools.len()));
 
     match route {
         None => Ok(vec![]),
