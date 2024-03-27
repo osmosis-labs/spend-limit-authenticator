@@ -24,3 +24,17 @@ or use it directly in the `osmosisd tx wasm instantiate` command.
 ```bash
 osmosisd tx wasm instantiate $CODE_ID $(cargo run gen-msg) --label "spend-limit" --no-admin --gas-prices 0.25uosmo --gas auto --gas-adjustment 1.5 --from $ACCOUNT
 ```
+
+Because the data comes from mainnet and your testing environment may have non up-to-date data, you may want to use `--latest-synced-pool` flag to filter out routes that are not available in your testing environment.
+
+```bash
+cargo run gen-msg --latest-synced-pool 1499
+```
+
+All resulted routes will have no cw pool or unsynced pool that will make instantiation failed because twap will fail to calculate. But there are cases where other pool fails to calculate twap as well, the error message will tell you which once you tried to instantiate.
+
+You can remove routes that contains those pool by
+
+```bash
+cargo run gen-msg --latest-synced-pool 1499 --rejected-pool-ids 1260,1261
+```
