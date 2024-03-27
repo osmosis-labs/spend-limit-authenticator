@@ -19,7 +19,7 @@ pub enum SpendLimitError {
     #[error("Accumulating spent value error: {0}")]
     AccumulatingSpentValueError(#[from] OverflowError),
 
-    #[error("Overspend: remaining qouta {remaining}, requested {requested}")]
+    #[error("Overspend: remaining quota {remaining}, requested {requested}")]
     Overspend {
         remaining: Uint128,
         requested: Uint128,
