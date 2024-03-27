@@ -78,6 +78,7 @@ pub async fn get_route(
     token_in: Token,
     token_out_denom: &str,
     latest_sycned_pool: Option<u64>,
+    rejected_pool_ids: &[u64],
 ) -> Result<Vec<SwapAmountInRoute>> {
     // TODO: use `/router/route` instead of `/router/qoute`.
     // blocked by: https://linear.app/osmosis/issue/STABI-41/[bug]-403-on-routerroutes
@@ -112,7 +113,12 @@ pub async fn get_route(
                 .map(|latest| r.pools.iter().any(|pool| pool.id > latest))
                 .unwrap_or(false);
 
-            !has_cw_pool && !has_unsycned_pool
+            let has_rejected_pool = r
+                .pools
+                .iter()
+                .any(|pool| rejected_pool_ids.contains(&pool.id));
+
+            !has_cw_pool && !has_unsycned_pool && !has_rejected_pool
         })
         // mininum hops route leads to cheaper twap cost
         .min_by(|a, b| a.pools.len().cmp(&b.pools.len()));

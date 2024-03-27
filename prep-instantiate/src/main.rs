@@ -28,6 +28,11 @@ enum Commands {
         /// This is only used for setting up test environment.
         #[arg(long)]
         latest_synced_pool: Option<u64>,
+
+        /// List of pool ids that should be rejected from the tracked denoms.
+        /// Should be pool that are not twap-able.
+        #[arg(long, value_delimiter = ',')]
+        rejected_pool_ids: Vec<u64>,
     },
 
     /// List tokens in the format that is easiliy copy-pastable to config.toml
@@ -58,6 +63,7 @@ async fn main() -> Result<()> {
         Commands::GenMsg {
             concurrency,
             latest_synced_pool,
+            rejected_pool_ids,
         } => {
             let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
@@ -69,6 +75,7 @@ async fn main() -> Result<()> {
                 &conf.price_resolution.quote_denom,
                 concurrency,
                 latest_synced_pool,
+                rejected_pool_ids,
             )
             .await;
 
@@ -118,6 +125,7 @@ async fn get_tracked_denom_infos(
     qoute_denom: &str,
     concurrency: usize,
     latest_synced_pool: Option<u64>,
+    rejected_pool_ids: Vec<u64>,
 ) -> Vec<TrackedDenom> {
     let token_map = get_token_map().await.expect("Failed to get prices");
     let quote_denom_info = token_map
@@ -150,6 +158,9 @@ async fn get_tracked_denom_infos(
         let routing_amount_in =
             (Decimal256::from_ratio(routing_amount_out, 1u128) * out_factor).to_uint_ceil();
 
+
+        let rejected_pool_ids = rejected_pool_ids.clone();
+
         let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
             let swap_routes = get_route(
                 Token {
@@ -157,7 +168,8 @@ async fn get_tracked_denom_infos(
                     denom: denom.to_string(),
                 },
                 qoute_denom.as_str(),
-                latest_synced_pool
+                latest_synced_pool,
+                &rejected_pool_ids
             )
             .await
             .expect("Failed to get route");
