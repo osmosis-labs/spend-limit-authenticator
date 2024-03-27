@@ -99,6 +99,7 @@ pub async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<Swa
 
             if !res {
                 eprintln!("Route contains cw-pool which can't get twap price:");
+                eprintln!("has_cw_pool: {}", r.has_cw_pool);
                 eprintln!("  - {}", token_in.denom);
                 for pool in &r.pools {
                     eprintln!(
