@@ -22,6 +22,11 @@ enum Commands {
         #[arg(long, default_value_t = 20)]
         concurrency: usize,
 
+        /// Filtering out route that contains pool that is blacklisted.
+        /// There are some pools that are not cw pool yet failed to calculate twap.
+        #[arg(long, value_delimiter = ',')]
+        blacklisted_pools: Vec<u64>,
+
         /// Filtering out tracked denoms that its route contains newer pool
         /// than latest pool that gets synced from mainnet.
         /// This is only used for setting up test environment.
@@ -56,6 +61,7 @@ async fn main() -> Result<()> {
     match args.command {
         Commands::GenMsg {
             concurrency,
+            blacklisted_pools,
             latest_synced_pool,
         } => {
             let conf: Config = toml::from_str(include_str!("../config.toml"))?;
@@ -64,6 +70,7 @@ async fn main() -> Result<()> {
                 conf.tracked_denoms.clone(),
                 &conf.price_resolution.quote_denom,
                 concurrency,
+                blacklisted_pools,
                 latest_synced_pool,
             )
             .await;
@@ -112,6 +119,7 @@ async fn get_tracked_denom_infos(
     denoms: Vec<String>,
     qoute_denom: &str,
     concurrency: usize,
+    blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
 ) -> Vec<TrackedDenom> {
     let token_map = get_token_map().await.expect("Failed to get prices");
@@ -120,10 +128,12 @@ async fn get_tracked_denom_infos(
     futures::stream::iter(denoms.into_iter().map(|denom| {
         let qoute_denom = qoute_denom.to_string();
         let pool_infos = pool_infos.clone();
+        let blacklisted_pools = blacklisted_pools.clone();
         let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
             let swap_routes = get_route(
     denom.to_string().as_str(),
                 qoute_denom.as_str(),
+                blacklisted_pools,
                 latest_synced_pool,
                 &pool_infos,
             )

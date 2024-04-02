@@ -53,6 +53,7 @@ pub struct Pool {
 pub async fn get_route(
     base_denom: &str,
     quote_denom: &str,
+    blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
     pools_info: &HashMap<u64, PoolInfo>,
 ) -> Result<Vec<SwapAmountInRoute>> {
@@ -71,11 +72,12 @@ pub async fn get_route(
         )
     })?;
 
-    // filter out routes that has newer pools than the latest synced pool
     Ok(routes
         .into_iter()
         .filter(|route| {
-            is_route_twapable(route, pools_info) && is_all_pool_synced(route, latest_synced_pool)
+            is_route_twapable(route, pools_info)
+                && is_all_pool_synced(route, latest_synced_pool)
+                && !has_blacklisted_pool(route, &blacklisted_pools)
         })
         .min_by(|a, b| a.pools.len().cmp(&b.pools.len()))
         .map(Route::to_swap_amount_in_route)
@@ -95,4 +97,11 @@ fn is_all_pool_synced(route: &Route, latest_synced_pool: Option<u64>) -> bool {
         return true;
     };
     route.pools.iter().all(|pool| pool.id <= latest_synced_pool)
+}
+
+fn has_blacklisted_pool(route: &Route, blacklisted_pools: &[u64]) -> bool {
+    route
+        .pools
+        .iter()
+        .any(|pool| blacklisted_pools.contains(&pool.id))
 }
