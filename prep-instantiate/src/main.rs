@@ -1,152 +1,178 @@
-use std::fmt::Display;
+use clap::{Parser, Subcommand, ValueEnum};
+use futures::StreamExt;
+use prep_instantiate::{get_pools, get_route, get_tokens, Config, Result, TokenInfo};
+use serde::Serialize;
+use spend_limit::msg::{InstantiateMsg, TrackedDenom};
+use std::collections::BTreeMap;
+use tokio::task::JoinHandle;
 
-use error_chain::error_chain;
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
-
-error_chain! {
-    foreign_links {
-        Io(std::io::Error);
-        HttpRequest(reqwest::Error);
-        Json(serde_json::Error);
-        Toml(toml::de::Error);
-    }
+/// Prepare instantiate msg for spend-limit contract
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-use serde::{Deserialize, Serialize};
-use spend_limit::{
-    msg::{InstantiateMsg, SwapAmountInRoute, TrackedDenom},
-    price::PriceResolutionConfig,
-};
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Generate instantiate msg for spend-limit contract
+    GenMsg {
+        /// Number of concurrent requests to make to get route
+        #[arg(long, default_value_t = 20)]
+        concurrency: usize,
+
+        /// Filtering out route that contains pool that is blacklisted.
+        /// There are some pools that are not cw pool yet failed to calculate twap.
+        #[arg(long, value_delimiter = ',')]
+        blacklisted_pools: Vec<u64>,
+
+        /// Filtering out tracked denoms that its route contains newer pool
+        /// than latest pool that gets synced from mainnet.
+        /// This is only used for setting up test environment.
+        #[arg(long)]
+        latest_synced_pool: Option<u64>,
+    },
+
+    /// List tokens in the format that is easiliy copy-pastable to config.toml
+    ListTokens {
+        /// Sort tokens by
+        #[arg(long)]
+        sort_by: SortBy,
+
+        /// Include all infos for each token
+        #[arg(long, short, default_value_t = false)]
+        verbose: bool,
+    },
+}
+
+#[derive(ValueEnum, Debug, Default, Serialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum SortBy {
+    #[default]
+    Volume24h,
+    Liquidity,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let conf: Config = toml::from_str(include_str!("../config.toml"))?;
+    let args = Args::parse();
 
-    let mut tracked_denoms = vec![];
+    match args.command {
+        Commands::GenMsg {
+            concurrency,
+            blacklisted_pools,
+            latest_synced_pool,
+        } => {
+            let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-    for denom in conf.tracked_denoms.iter() {
-        let amount = conf.routing_amount_in.parse().unwrap(); // TODO: handle error
-        let route = TrackedDenom {
-            denom: denom.to_string(),
-            swap_routes: get_route(
-                Token::new(amount, denom),
+            let tracked_denoms = get_tracked_denom_infos(
+                conf.tracked_denoms.clone(),
                 &conf.price_resolution.quote_denom,
+                concurrency,
+                blacklisted_pools,
+                latest_synced_pool,
             )
-            .await?,
-        };
-        tracked_denoms.push(route);
+            .await;
+
+            let msg = InstantiateMsg {
+                price_resolution_config: conf.price_resolution,
+                tracked_denoms,
+            };
+
+            // write instantiate msg to stdout
+            let msg_str = serde_json::to_string(&msg)?;
+            println!("{}", msg_str);
+        }
+        Commands::ListTokens { sort_by, verbose } => {
+            get_tokens_sorted_by_24h_volume(sort_by)
+                .await
+                .iter()
+                .for_each(|token| {
+                    print!("\"{}\", # {} - {}", token.denom, token.symbol, token.name);
+                    if verbose {
+                        print!(
+                            " (volume_24h = {}, liquidity = {})",
+                            token.volume_24h, token.liquidity
+                        );
+                    }
+                    println!();
+                });
+        }
     }
-
-    let msg = InstantiateMsg {
-        price_resolution_config: conf.price_resolution,
-        tracked_denoms,
-    };
-
-    // write instantiate msg to stdout
-    let msg_str = serde_json::to_string(&msg)?;
-    println!("{}", msg_str);
 
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Config {
-    /// The price resolution config used directly in the instantiate msg
-    price_resolution: PriceResolutionConfig,
+async fn get_tokens_sorted_by_24h_volume(sort_by: SortBy) -> Vec<TokenInfo> {
+    let mut tokens = get_tokens().await.expect("Failed to get tokens");
 
-    /// The amount of token to calculate route via sqs
-    routing_amount_in: String,
+    match sort_by {
+        SortBy::Volume24h => tokens.sort_by(|a, b| b.volume_24h.total_cmp(&a.volume_24h)),
+        SortBy::Liquidity => tokens.sort_by(|a, b| b.liquidity.total_cmp(&a.liquidity)),
+    }
 
-    /// The denoms to track, used for calculating route via sqs
-    tracked_denoms: Vec<String>,
+    tokens
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct RouterResponse {
-    amount_in: Token,
-    amount_out: String,
-    route: Vec<Route>,
-    effective_fee: String,
-    price_impact: String,
-    in_base_out_quote_spot_price: String,
-}
+async fn get_tracked_denom_infos(
+    denoms: Vec<String>,
+    qoute_denom: &str,
+    concurrency: usize,
+    blacklisted_pools: Vec<u64>,
+    latest_synced_pool: Option<u64>,
+) -> Vec<TrackedDenom> {
+    let token_map = get_token_map().await.expect("Failed to get prices");
+    let pool_infos = get_pools().await.expect("Failed to get pools");
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Token {
-    denom: String,
-    amount: String,
-}
+    futures::stream::iter(denoms.into_iter().map(|denom| {
+        let qoute_denom = qoute_denom.to_string();
+        let pool_infos = pool_infos.clone();
+        let blacklisted_pools = blacklisted_pools.clone();
+        let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
+            let swap_routes = get_route(
+    denom.to_string().as_str(),
+                qoute_denom.as_str(),
+                blacklisted_pools,
+                latest_synced_pool,
+                &pool_infos,
+            )
+            .await
+            .expect("Failed to get route");
 
-impl Token {
-    fn new(amount: u128, denom: &str) -> Self {
-        Self {
-            amount: amount.to_string(),
-            denom: denom.to_string(),
+            TrackedDenom {
+                denom: denom.to_string(),
+                swap_routes,
+            }
+        });
+
+        handle
+    }))
+    .buffer_unordered(concurrency)
+    .filter_map(|handle| async {
+        let res = handle.expect("Failed to join handle");
+
+        if res.swap_routes.is_empty() {
+            eprintln!(
+                "⚠️ Can't automatically resolve twap-able route for denom: `{}` [`{}`], please manually set the route or remove it from the config",
+                res.denom, token_map[&res.denom].symbol
+            );
+
+            return None;
         }
-    }
-}
-impl Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.amount, self.denom)
-    }
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Route {
-    pools: Vec<Pool>,
-    #[serde(rename = "has-cw-pool")]
-    has_cw_pool: bool,
-    out_amount: String,
-    in_amount: String,
+        Some(res)
+    })
+    .collect::<Vec<_>>()
+    .await
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Pool {
-    id: u64,
-    #[serde(rename = "type")]
-    pool_type: u8,
-    balances: Vec<String>,
-    spread_factor: String,
-    token_out_denom: String,
-    taker_fee: String,
-}
+async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
+    let tokens = get_tokens().await?;
+    let prices = tokens
+        .into_iter()
+        .map(|token| (token.denom.clone(), token))
+        .collect::<BTreeMap<_, _>>();
 
-async fn get_route(token_in: Token, token_out_denom: &str) -> Result<Vec<SwapAmountInRoute>> {
-    let url = format!(
-        "https://sqsprod.osmosis.zone/router/quote?tokenIn={}&tokenOutDenom={}",
-        utf8_percent_encode(token_in.to_string().as_str(), NON_ALPHANUMERIC),
-        token_out_denom
-    );
-
-    let res = reqwest::get(&url).await?;
-    let txt = res.text().await?;
-    let response: RouterResponse = serde_json::from_str(&txt).map_err(|e| {
-        format!(
-            "Failed to parse response from sqs: {}. Response: {}",
-            e, txt
-        )
-    })?;
-
-    // get route with the best out amount
-    let route = response
-        .route
-        .iter()
-        .max_by(|a, b| {
-            a.out_amount
-                .parse::<u128>()
-                .unwrap()
-                .cmp(&b.out_amount.parse::<u128>().unwrap())
-        })
-        .expect("No route found");
-
-    let best_route = route
-        .pools
-        .iter()
-        .map(|pool| SwapAmountInRoute {
-            pool_id: pool.id,
-            token_out_denom: pool.token_out_denom.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    Ok(best_route)
+    Ok(prices)
 }
