@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use futures::StreamExt;
-use prep_instantiate::{get_route, get_tokens, Config, Result, TokenInfo};
+use prep_instantiate::{get_pools, get_route, get_tokens, Config, Result, TokenInfo};
 use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, TrackedDenom};
 use std::collections::BTreeMap;
@@ -57,7 +57,6 @@ async fn main() -> Result<()> {
         Commands::GenMsg {
             concurrency,
             latest_synced_pool,
-
         } => {
             let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
@@ -66,7 +65,6 @@ async fn main() -> Result<()> {
                 &conf.price_resolution.quote_denom,
                 concurrency,
                 latest_synced_pool,
-
             )
             .await;
 
@@ -117,14 +115,17 @@ async fn get_tracked_denom_infos(
     latest_synced_pool: Option<u64>,
 ) -> Vec<TrackedDenom> {
     let token_map = get_token_map().await.expect("Failed to get prices");
+    let pool_infos = get_pools().await.expect("Failed to get pools");
 
     futures::stream::iter(denoms.into_iter().map(|denom| {
         let qoute_denom = qoute_denom.to_string();
+        let pool_infos = pool_infos.clone();
         let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
-            let swap_routes = get_route(                
+            let swap_routes = get_route(
     denom.to_string().as_str(),
                 qoute_denom.as_str(),
-                latest_synced_pool
+                latest_synced_pool,
+                &pool_infos,
             )
             .await
             .expect("Failed to get route");
@@ -165,4 +166,3 @@ async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
 
     Ok(prices)
 }
-

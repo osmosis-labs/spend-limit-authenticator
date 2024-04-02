@@ -5,6 +5,7 @@ error_chain! {
         HttpRequest(reqwest::Error);
         Json(serde_json::Error);
         Toml(toml::de::Error);
-        JoinError(tokio::task::JoinError);
+        Join(tokio::task::JoinError);
+        DateTimeFormat(time::error::Format);
     }
 }

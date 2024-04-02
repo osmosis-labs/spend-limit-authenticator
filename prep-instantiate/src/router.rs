@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{pools::PoolInfo, Result};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use spend_limit::msg::SwapAmountInRoute;
 use std::collections::{HashMap, HashSet};
@@ -54,6 +54,7 @@ pub async fn get_route(
     base_denom: &str,
     quote_denom: &str,
     latest_synced_pool: Option<u64>,
+    pools_info: &HashMap<u64, PoolInfo>,
 ) -> Result<Vec<SwapAmountInRoute>> {
     let url = format!(
         "https://sqsprod.osmosis.zone/router/routes?tokenIn={}&tokenOutDenom={}&humanDenoms=false",
@@ -71,18 +72,27 @@ pub async fn get_route(
     })?;
 
     // filter out routes that has newer pools than the latest synced pool
-    Ok(if let Some(latest_synced_pool) = latest_synced_pool {
-        routes
-            .into_iter()
-            .filter(|route| route.pools.iter().all(|pool| pool.id <= latest_synced_pool))
-            .min_by(|a, b| a.pools.len().cmp(&b.pools.len()))
-            .map(Route::to_swap_amount_in_route)
-            .unwrap()
-    } else {
-        routes
-            .into_iter()
-            .min_by(|a, b| a.pools.len().cmp(&b.pools.len()))
-            .map(Route::to_swap_amount_in_route)
-            .unwrap()
-    })
+    Ok(routes
+        .into_iter()
+        .filter(|route| {
+            is_route_twapable(route, pools_info) && is_all_pool_synced(route, latest_synced_pool)
+        })
+        .min_by(|a, b| a.pools.len().cmp(&b.pools.len()))
+        .map(Route::to_swap_amount_in_route)
+        .unwrap())
+}
+
+fn is_route_twapable(route: &Route, pools_info: &HashMap<u64, PoolInfo>) -> bool {
+    route
+        .pools
+        .iter()
+        .all(|pool| pools_info.get(&pool.id).unwrap().is_twap_supported())
+}
+
+fn is_all_pool_synced(route: &Route, latest_synced_pool: Option<u64>) -> bool {
+    // no `latest_synced_pool` means pools are synced to latest pool
+    let Some(latest_synced_pool) = latest_synced_pool else {
+        return true;
+    };
+    route.pools.iter().all(|pool| pool.id <= latest_synced_pool)
 }

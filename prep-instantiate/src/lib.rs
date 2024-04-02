@@ -7,5 +7,10 @@ pub use config::Config;
 mod router;
 pub use router::get_route;
 
+mod pools;
+pub use pools::{get_pools, PoolInfo};
+
+mod twap;
+
 mod token;
 pub use token::{get_tokens, TokenInfo};

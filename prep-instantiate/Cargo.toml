@@ -15,5 +15,6 @@ reqwest = "0.12.0"
 serde = "1.0.197"
 serde_json = "1.0.114"
 spend_limit = {path = "../contracts/spend-limit"}
+time = { version = "0.3.34", features = ["formatting"] }
 tokio = {version = "1.36.0", features = ["full"]}
 toml = "0.8.12"
