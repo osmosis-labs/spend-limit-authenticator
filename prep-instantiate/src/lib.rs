@@ -11,6 +11,7 @@ mod pools;
 pub use pools::{get_pools, PoolInfo};
 
 mod twap;
+pub use twap::arithmetic_twap_to_now;
 
 mod token;
 pub use token::{get_tokens, TokenInfo};
