@@ -36,5 +36,5 @@ All resulted routes will have no cw pool or unsynced pool that will make instant
 You can remove routes that contains those pool by
 
 ```bash
-cargo run gen-msg --latest-synced-pool 1499 --rejected-pool-ids 1260,1261
+cargo run gen-msg --latest-synced-pool 1499 --blacklisted-pools 1260,1275,1066
 ```
