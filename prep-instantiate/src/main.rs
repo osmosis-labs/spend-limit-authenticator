@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use cosmwasm_std::{Decimal, Decimal256, Fraction};
 use futures::StreamExt;
-use prep_instantiate::{get_route, get_tokens, Config, Result, Token, TokenInfo};
+use prep_instantiate::{get_route, get_tokens, Config, Result, TokenInfo};
 use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, TrackedDenom};
 use std::collections::BTreeMap;
@@ -28,11 +27,6 @@ enum Commands {
         /// This is only used for setting up test environment.
         #[arg(long)]
         latest_synced_pool: Option<u64>,
-
-        /// List of pool ids that should be rejected from the tracked denoms.
-        /// Should be pool that are not twap-able.
-        #[arg(long, value_delimiter = ',')]
-        rejected_pool_ids: Vec<u64>,
     },
 
     /// List tokens in the format that is easiliy copy-pastable to config.toml
@@ -63,19 +57,16 @@ async fn main() -> Result<()> {
         Commands::GenMsg {
             concurrency,
             latest_synced_pool,
-            rejected_pool_ids,
+
         } => {
             let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
             let tracked_denoms = get_tracked_denom_infos(
                 conf.tracked_denoms.clone(),
-                conf.routing_amount_out
-                    .parse()
-                    .expect("Failed to parse routing amount in as u128"),
                 &conf.price_resolution.quote_denom,
                 concurrency,
                 latest_synced_pool,
-                rejected_pool_ids,
+
             )
             .await;
 
@@ -121,55 +112,19 @@ async fn get_tokens_sorted_by_24h_volume(sort_by: SortBy) -> Vec<TokenInfo> {
 
 async fn get_tracked_denom_infos(
     denoms: Vec<String>,
-    routing_amount_out: u128,
     qoute_denom: &str,
     concurrency: usize,
     latest_synced_pool: Option<u64>,
-    rejected_pool_ids: Vec<u64>,
 ) -> Vec<TrackedDenom> {
     let token_map = get_token_map().await.expect("Failed to get prices");
-    let quote_denom_info = token_map
-        .get(qoute_denom)
-        .expect("Failed to get quote denom info");
 
     futures::stream::iter(denoms.into_iter().map(|denom| {
         let qoute_denom = qoute_denom.to_string();
-        let denom_info = token_map.get(&denom).expect("Failed to get denom info");
-
-        // out * quote_price = in * denom_price
-        // in = out * (quote_price / denom_price)
-        let out_factor = if denom_info.exponent > quote_denom_info.exponent {
-            to_decimal(quote_denom_info.price) / to_decimal(denom_info.price)
-                * Decimal::from_ratio(
-                    10u128.pow(denom_info.exponent - quote_denom_info.exponent),
-                    1u128,
-                )
-        } else {
-            to_decimal(quote_denom_info.price)
-                / to_decimal(denom_info.price)
-                / Decimal::from_ratio(
-                    10u128.pow(quote_denom_info.exponent - denom_info.exponent),
-                    1u128,
-                )
-        };
-
-        let out_factor = Decimal256::from_ratio(out_factor.numerator(), out_factor.denominator());
-
-        let routing_amount_in =
-            (Decimal256::from_ratio(routing_amount_out, 1u128) * out_factor).to_uint_ceil();
-
-
-        let rejected_pool_ids = rejected_pool_ids.clone();
-
         let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
-            let swap_routes = get_route(
-                Token {
-                    amount: routing_amount_in.to_string(),
-                    denom: denom.to_string(),
-                },
+            let swap_routes = get_route(                
+    denom.to_string().as_str(),
                 qoute_denom.as_str(),
-                latest_synced_pool,
-                &rejected_pool_ids
+                latest_synced_pool
             )
             .await
             .expect("Failed to get route");
@@ -211,6 +166,3 @@ async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
     Ok(prices)
 }
 
-fn to_decimal(value: f64) -> Decimal {
-    value.to_string().parse().expect("Failed to parse decimal")
-}
