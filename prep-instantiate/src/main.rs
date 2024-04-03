@@ -153,9 +153,10 @@ async fn select_routes(
         .await
         .expect("Failed to get pool liquidities");
 
+    let total_denoms = conf.tracked_denoms.len();
     let mut tracked_denoms = vec![];
 
-    for denom in &conf.tracked_denoms {
+    for (index, denom) in conf.tracked_denoms.iter().enumerate() {
         let qoute_denom = conf.price_resolution.quote_denom.to_string();
         let pool_infos = pool_infos.clone();
         let blacklisted_pools = blacklisted_pools.clone();
@@ -184,12 +185,15 @@ async fn select_routes(
         // clear terminal
         // println!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         let symbol = token_map[denom].symbol.as_str();
-        let route_choice = Select::new(format!("`{}` route =", symbol).as_str(), route_choices)
-            .with_render_config(
-                RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
-            )
-            .prompt()
-            .unwrap();
+        let route_choice = Select::new(
+            format!("<{}/{}> `{}` route =", index + 1, total_denoms, symbol).as_str(),
+            route_choices,
+        )
+        .with_render_config(
+            RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
+        )
+        .prompt()
+        .unwrap();
 
         let res = TrackedDenom {
             denom: denom.to_string(),
