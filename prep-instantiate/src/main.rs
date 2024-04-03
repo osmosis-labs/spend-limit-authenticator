@@ -193,7 +193,7 @@ async fn select_routes(
             price_resolution_config: conf.price_resolution.clone(),
             tracked_denoms: tracked_denoms.clone(),
         };
-        let msg = serde_json::to_string(&msg).expect("Failed to serialize msg");
+        let msg = serde_json::to_string_pretty(&msg).expect("Failed to serialize msg");
         std::fs::write(write_to.clone(), msg).expect("Failed to write msg to file");
     }
 }
