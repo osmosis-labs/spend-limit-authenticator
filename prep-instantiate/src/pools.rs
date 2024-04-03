@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::Result;
+
 use cosmwasm_std::Coin;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -55,7 +56,7 @@ pub struct ChainModel {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SQSPoolInfo {
+pub struct PoolInfo {
     pub chain_model: ChainModel,
 
     pub balances: Vec<Coin>,
@@ -64,7 +65,7 @@ pub struct SQSPoolInfo {
     pub pool_type: PoolType,
 }
 
-impl SQSPoolInfo {
+impl PoolInfo {
     /// CosmWasm pools are not currently supported for TWAP calculations.
     pub fn is_twap_supported(&self) -> bool {
         matches!(
@@ -74,11 +75,11 @@ impl SQSPoolInfo {
     }
 }
 
-pub async fn get_pools() -> Result<HashMap<u64, SQSPoolInfo>> {
+pub async fn get_pools() -> Result<HashMap<u64, PoolInfo>> {
     let res = reqwest::get("https://sqsprod.osmosis.zone/pools").await?;
     let txt = res.text().await?;
 
-    Ok(serde_json::from_str::<Vec<SQSPoolInfo>>(&txt)
+    Ok(serde_json::from_str::<Vec<PoolInfo>>(&txt)
         .map_err(|e| {
             format!(
                 "Failed to parse pool infos from response: {}. Response: {}",
@@ -90,6 +91,31 @@ pub async fn get_pools() -> Result<HashMap<u64, SQSPoolInfo>> {
         .collect::<HashMap<_, _>>())
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ImperatorPoolAsset {
+    // omit other fields since it's not used
+    pub liquidity: f64,
+}
+
+pub async fn get_pool_liquidities() -> Result<HashMap<u64, f64>> {
+    let res =
+        reqwest::get("https://api-osmosis.imperator.co/pools/v2/all?low_liquidity=true").await?;
+    let txt = res.text().await?;
+
+    Ok(
+        serde_json::from_str::<HashMap<String, Vec<ImperatorPoolAsset>>>(&txt)
+            .map_err(|e| {
+                format!(
+                    "Failed to parse pool infos from response: {}. Response: {}",
+                    e, txt
+                )
+            })?
+            .into_iter()
+            .map(|(id, assets)| (id.parse::<u64>().unwrap(), assets[0].clone().liquidity))
+            .collect::<HashMap<_, _>>(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,6 +124,14 @@ mod tests {
     #[ignore = "slow & flaky test, use in dev only"]
     async fn test_pools() {
         let res = get_pools().await;
+
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    #[ignore = "slow & flaky test, use in dev only"]
+    async fn test_pool_liquidities() {
+        let res = get_pool_liquidities().await;
 
         assert!(res.is_ok());
     }

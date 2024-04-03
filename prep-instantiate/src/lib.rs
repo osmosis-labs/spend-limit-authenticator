@@ -8,7 +8,7 @@ mod router;
 pub use router::get_route;
 
 mod pools;
-pub use pools::{get_pools, SQSPoolInfo};
+pub use pools::{get_pool_liquidities, get_pools, PoolInfo};
 
 mod twap;
 pub use twap::arithmetic_twap_to_now;

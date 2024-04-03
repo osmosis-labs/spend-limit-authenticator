@@ -1,4 +1,4 @@
-use crate::{pools::SQSPoolInfo, Result};
+use crate::{pools::PoolInfo, Result};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use spend_limit::msg::SwapAmountInRoute;
 use std::collections::{HashMap, HashSet};
@@ -55,7 +55,7 @@ pub async fn get_route(
     quote_denom: &str,
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
-    pools_info: &HashMap<u64, SQSPoolInfo>,
+    pools_info: &HashMap<u64, PoolInfo>,
 ) -> Result<Vec<Vec<SwapAmountInRoute>>> {
     let url = format!(
         "https://sqsprod.osmosis.zone/router/routes?tokenIn={}&tokenOutDenom={}&humanDenoms=false",
@@ -83,7 +83,7 @@ pub async fn get_route(
         .collect())
 }
 
-fn is_route_twapable(route: &Route, pools_info: &HashMap<u64, SQSPoolInfo>) -> bool {
+fn is_route_twapable(route: &Route, pools_info: &HashMap<u64, PoolInfo>) -> bool {
     route
         .pools
         .iter()

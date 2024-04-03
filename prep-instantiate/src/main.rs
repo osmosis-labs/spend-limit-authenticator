@@ -3,7 +3,9 @@ use inquire::{
     ui::{IndexPrefix, RenderConfig},
     Select,
 };
-use prep_instantiate::{get_pools, get_route, get_tokens, Config, Result, SQSPoolInfo, TokenInfo};
+use prep_instantiate::{
+    get_pool_liquidities, get_pools, get_route, get_tokens, Config, PoolInfo, Result, TokenInfo,
+};
 use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, SwapAmountInRoute, TrackedDenom};
 use std::{
@@ -109,7 +111,8 @@ struct RouteChoice<'a> {
     token_in: &'a str,
     routes: Vec<SwapAmountInRoute>,
     token_map: &'a BTreeMap<String, TokenInfo>,
-    pool_infos: &'a HashMap<u64, SQSPoolInfo>,
+    pool_infos: &'a HashMap<u64, PoolInfo>,
+    liquidities: &'a HashMap<u64, f64>,
 }
 
 impl<'a> Display for RouteChoice<'a> {
@@ -123,11 +126,12 @@ impl<'a> Display for RouteChoice<'a> {
         for route in self.routes.iter() {
             let token_out_symbol = self.token_map[&route.token_out_denom].symbol.as_str();
             let pool_info = self.pool_infos.get(&route.pool_id).unwrap();
+            let liquidity = self.liquidities.get(&route.pool_id).unwrap().round() as u64;
 
             write!(
                 f,
-                " pool:[{}#{}] -({})>",
-                pool_info.pool_type, route.pool_id, token_out_symbol
+                " pool:[{}#{} ~ ${}] -({})>",
+                pool_info.pool_type, route.pool_id, liquidity, token_out_symbol
             )?;
         }
 
@@ -143,6 +147,9 @@ async fn select_routes(
 ) {
     let token_map = get_token_map().await.expect("Failed to get prices");
     let pool_infos = get_pools().await.expect("Failed to get pools");
+    let liquidities = get_pool_liquidities()
+        .await
+        .expect("Failed to get pool liquidities");
 
     let mut tracked_denoms = vec![];
 
@@ -168,6 +175,7 @@ async fn select_routes(
                 routes,
                 token_map: &token_map,
                 pool_infos: &pool_infos,
+                liquidities: &liquidities,
             })
             .collect::<Vec<_>>();
 
