@@ -187,15 +187,15 @@ async fn select_routes(
         };
 
         tracked_denoms.push(res);
-    }
-    let msg = InstantiateMsg {
-        price_resolution_config: conf.price_resolution,
-        tracked_denoms,
-    };
 
-    // write msg to file as json
-    let msg = serde_json::to_string_pretty(&msg).expect("Failed to serialize msg");
-    std::fs::write(write_to, msg).expect("Failed to write msg to file");
+        // keep saving result to file every time user selects a route
+        let msg = InstantiateMsg {
+            price_resolution_config: conf.price_resolution.clone(),
+            tracked_denoms: tracked_denoms.clone(),
+        };
+        let msg = serde_json::to_string(&msg).expect("Failed to serialize msg");
+        std::fs::write(write_to.clone(), msg).expect("Failed to write msg to file");
+    }
 }
 
 async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
