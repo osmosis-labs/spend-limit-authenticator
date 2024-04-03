@@ -1,10 +1,16 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use futures::StreamExt;
-use prep_instantiate::{get_pools, get_route, get_tokens, Config, Result, TokenInfo};
+use inquire::{
+    ui::{IndexPrefix, RenderConfig},
+    Select,
+};
+use prep_instantiate::{get_pools, get_route, get_tokens, Config, Result, SQSPoolInfo, TokenInfo};
 use serde::Serialize;
-use spend_limit::msg::{InstantiateMsg, TrackedDenom};
-use std::collections::BTreeMap;
-use tokio::task::JoinHandle;
+use spend_limit::msg::{InstantiateMsg, SwapAmountInRoute, TrackedDenom};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::{self, Display, Formatter},
+    path::PathBuf,
+};
 
 /// Prepare instantiate msg for spend-limit contract
 #[derive(Parser, Debug)]
@@ -18,9 +24,9 @@ struct Args {
 enum Commands {
     /// Generate instantiate msg for spend-limit contract
     GenMsg {
-        /// Number of concurrent requests to make to get route
-        #[arg(long, default_value_t = 20)]
-        concurrency: usize,
+        /// File to write resulted message to
+        #[arg(long)]
+        write_to: PathBuf,
 
         /// Filtering out route that contains pool that is blacklisted.
         /// There are some pools that are not cw pool yet failed to calculate twap.
@@ -60,29 +66,13 @@ async fn main() -> Result<()> {
 
     match args.command {
         Commands::GenMsg {
-            concurrency,
+            write_to,
             blacklisted_pools,
             latest_synced_pool,
         } => {
             let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-            let tracked_denoms = get_tracked_denom_infos(
-                conf.tracked_denoms.clone(),
-                &conf.price_resolution.quote_denom,
-                concurrency,
-                blacklisted_pools,
-                latest_synced_pool,
-            )
-            .await;
-
-            let msg = InstantiateMsg {
-                price_resolution_config: conf.price_resolution,
-                tracked_denoms,
-            };
-
-            // write instantiate msg to stdout
-            let msg_str = serde_json::to_string(&msg)?;
-            println!("{}", msg_str);
+            select_routes(conf, write_to, blacklisted_pools, latest_synced_pool).await;
         }
         Commands::ListTokens { sort_by, verbose } => {
             get_tokens_sorted_by_24h_volume(sort_by)
@@ -115,56 +105,97 @@ async fn get_tokens_sorted_by_24h_volume(sort_by: SortBy) -> Vec<TokenInfo> {
     tokens
 }
 
-async fn get_tracked_denom_infos(
-    denoms: Vec<String>,
-    qoute_denom: &str,
-    concurrency: usize,
+struct RouteChoice<'a> {
+    token_in: &'a str,
+    routes: Vec<SwapAmountInRoute>,
+    token_map: &'a BTreeMap<String, TokenInfo>,
+    pool_infos: &'a HashMap<u64, SQSPoolInfo>,
+}
+
+impl<'a> Display for RouteChoice<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let token_in_symbol = self.token_map[self.token_in].symbol.as_str();
+
+        let hops = self.routes.len();
+
+        write!(f, "[hops = {}] -({})>", hops, token_in_symbol)?;
+
+        for route in self.routes.iter() {
+            let token_out_symbol = self.token_map[&route.token_out_denom].symbol.as_str();
+            let pool_info = self.pool_infos.get(&route.pool_id).unwrap();
+
+            write!(
+                f,
+                " pool:[{}#{}] -({})>",
+                pool_info.pool_type, route.pool_id, token_out_symbol
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
+async fn select_routes(
+    conf: Config,
+    write_to: PathBuf,
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
-) -> Vec<TrackedDenom> {
+) {
     let token_map = get_token_map().await.expect("Failed to get prices");
     let pool_infos = get_pools().await.expect("Failed to get pools");
 
-    futures::stream::iter(denoms.into_iter().map(|denom| {
-        let qoute_denom = qoute_denom.to_string();
+    let mut tracked_denoms = vec![];
+
+    for denom in &conf.tracked_denoms {
+        let qoute_denom = conf.price_resolution.quote_denom.to_string();
         let pool_infos = pool_infos.clone();
         let blacklisted_pools = blacklisted_pools.clone();
-        let handle: JoinHandle<TrackedDenom> = tokio::spawn(async move {
-            let swap_routes = get_route(
-    denom.to_string().as_str(),
-                qoute_denom.as_str(),
-                blacklisted_pools,
-                latest_synced_pool,
-                &pool_infos,
+
+        let swap_routes = get_route(
+            denom.to_string().as_str(),
+            qoute_denom.as_str(),
+            blacklisted_pools,
+            latest_synced_pool,
+            &pool_infos,
+        )
+        .await
+        .expect("Failed to get route");
+
+        let route_choices = swap_routes
+            .into_iter()
+            .map(|routes| RouteChoice {
+                token_in: denom,
+                routes,
+                token_map: &token_map,
+                pool_infos: &pool_infos,
+            })
+            .collect::<Vec<_>>();
+
+        // clear terminal
+        // println!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+        let symbol = token_map[denom].symbol.as_str();
+        let route_choice = Select::new(format!("`{}` route =", symbol).as_str(), route_choices)
+            .with_render_config(
+                RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
             )
-            .await
-            .expect("Failed to get route");
+            .prompt()
+            .unwrap();
 
-            TrackedDenom {
-                denom: denom.to_string(),
-                swap_routes,
-            }
-        });
+        let res = TrackedDenom {
+            denom: denom.to_string(),
+            swap_routes: route_choice.routes,
+        };
 
-        handle
-    }))
-    .buffer_unordered(concurrency)
-    .filter_map(|handle| async {
-        let res = handle.expect("Failed to join handle");
+        tracked_denoms.push(res);
+    }
+    let msg = InstantiateMsg {
+        price_resolution_config: conf.price_resolution,
+        tracked_denoms,
+    };
 
-        if res.swap_routes.is_empty() {
-            eprintln!(
-                "⚠️ Can't automatically resolve twap-able route for denom: `{}` [`{}`], please manually set the route or remove it from the config",
-                res.denom, token_map[&res.denom].symbol
-            );
-
-            return None;
-        }
-
-        Some(res)
-    })
-    .collect::<Vec<_>>()
-    .await
+    // write msg to file as json
+    let msg = serde_json::to_string_pretty(&msg).expect("Failed to serialize msg");
+    std::fs::write(write_to, msg).expect("Failed to write msg to file");
 }
 
 async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {

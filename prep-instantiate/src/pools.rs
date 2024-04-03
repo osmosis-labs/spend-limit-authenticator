@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+};
 
 use crate::Result;
 use cosmwasm_std::Coin;
@@ -18,6 +21,17 @@ pub enum PoolType {
     // CosmWasm is the pool model specific to CosmWasm. It is defined in
     // x/cosmwasmpool.
     CosmWasm = 3,
+}
+
+impl Display for PoolType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            PoolType::Balancer => write!(f, "BL"),
+            PoolType::Stableswap => write!(f, "SS"),
+            PoolType::Concentrated => write!(f, "CL"),
+            PoolType::CosmWasm => write!(f, "CW"),
+        }
+    }
 }
 
 pub fn deserialize_pool_type<'de, D>(deserializer: D) -> std::result::Result<PoolType, D::Error>
@@ -41,7 +55,7 @@ pub struct ChainModel {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PoolInfo {
+pub struct SQSPoolInfo {
     pub chain_model: ChainModel,
 
     pub balances: Vec<Coin>,
@@ -50,7 +64,7 @@ pub struct PoolInfo {
     pub pool_type: PoolType,
 }
 
-impl PoolInfo {
+impl SQSPoolInfo {
     /// CosmWasm pools are not currently supported for TWAP calculations.
     pub fn is_twap_supported(&self) -> bool {
         matches!(
@@ -60,11 +74,11 @@ impl PoolInfo {
     }
 }
 
-pub async fn get_pools() -> Result<HashMap<u64, PoolInfo>> {
+pub async fn get_pools() -> Result<HashMap<u64, SQSPoolInfo>> {
     let res = reqwest::get("https://sqsprod.osmosis.zone/pools").await?;
     let txt = res.text().await?;
 
-    Ok(serde_json::from_str::<Vec<PoolInfo>>(&txt)
+    Ok(serde_json::from_str::<Vec<SQSPoolInfo>>(&txt)
         .map_err(|e| {
             format!(
                 "Failed to parse pool infos from response: {}. Response: {}",
