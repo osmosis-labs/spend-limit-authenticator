@@ -3,6 +3,7 @@ use inquire::{
     ui::{IndexPrefix, RenderConfig},
     Select,
 };
+use num_format::{Locale, ToFormattedString};
 use prep_instantiate::{
     get_pool_liquidities, get_pools, get_route, get_tokens, Config, PoolInfo, Result, TokenInfo,
 };
@@ -126,7 +127,8 @@ impl<'a> Display for RouteChoice<'a> {
         for route in self.routes.iter() {
             let token_out_symbol = self.token_map[&route.token_out_denom].symbol.as_str();
             let pool_info = self.pool_infos.get(&route.pool_id).unwrap();
-            let liquidity = self.liquidities.get(&route.pool_id).unwrap().round() as u64;
+            let liquidity = (self.liquidities.get(&route.pool_id).unwrap().round() as u64)
+                .to_formatted_string(&Locale::en);
 
             write!(
                 f,
