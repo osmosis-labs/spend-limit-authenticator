@@ -10,6 +10,7 @@ clap = {version = "4.5.4", features = ["derive"]}
 cosmwasm-std = "2.0.0"
 error-chain = "0.12.4"
 futures = "0.3.30"
+indicatif = "0.17.8"
 inquire = "0.7.4"
 num-format = "0.4.4"
 percent-encoding = "2.3.1"

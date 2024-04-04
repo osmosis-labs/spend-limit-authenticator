@@ -96,14 +96,21 @@ async fn main() -> Result<()> {
         RootCommand::Message { cmd } => match cmd {
             MessageCommand::Generate {
                 target_file,
-                reset: _, // TODO: contunue from previous state if not reset
+                reset,
                 blacklisted_pools,
                 latest_synced_pool,
             } => {
                 // TODO: expose config file location as an argument
                 let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-                select_routes(conf, target_file, blacklisted_pools, latest_synced_pool).await;
+                select_routes(
+                    conf,
+                    target_file,
+                    blacklisted_pools,
+                    latest_synced_pool,
+                    reset,
+                )
+                .await;
             }
         },
         RootCommand::Token { cmd } => match cmd {
@@ -177,21 +184,58 @@ async fn select_routes(
     target_file: PathBuf,
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
+    reset: bool,
 ) {
+    let prog = indicatif::ProgressBar::new_spinner();
+
+    prog.set_message("Fetching token info...");
     let token_map = get_token_map().await.expect("Failed to get prices");
+
+    prog.set_message("Fetching general pool info...");
     let pool_infos = get_pools().await.expect("Failed to get pools");
+
+    prog.set_message("Fetching pools' liquidity...");
     let liquidities = get_pool_liquidities()
         .await
         .expect("Failed to get pool liquidities");
 
-    let total_denoms = conf.tracked_denoms.len();
-    let mut tracked_denoms = vec![];
+    prog.finish_and_clear();
 
-    for (index, denom) in conf.tracked_denoms.iter().enumerate() {
+    let total_denoms = conf.tracked_denoms.len();
+
+    // if not reset, it will try to continue from previous state if exists
+    let mut msg: InstantiateMsg = if !reset && target_file.exists() {
+        let msg = std::fs::read_to_string(target_file.clone()).expect("Failed to read file");
+        serde_json::from_str(&msg).expect("Failed to parse msg")
+    } else {
+        InstantiateMsg {
+            price_resolution_config: conf.price_resolution.clone(),
+            tracked_denoms: vec![],
+        }
+    };
+
+    let prev_progress = msg.tracked_denoms.len();
+    let existing_tracked_denoms = msg.tracked_denoms.clone();
+
+    let denoms: Box<dyn Iterator<Item = String>> = if reset {
+        Box::new(conf.tracked_denoms.into_iter())
+    } else {
+        // find vec of denoms that are not yet selected
+        let pending_denoms = conf.tracked_denoms.into_iter().filter(|denom| {
+            !existing_tracked_denoms
+                .iter()
+                .any(|tracked| tracked.denom == *denom)
+        });
+        Box::new(pending_denoms)
+    };
+
+    for (index, denom) in denoms.enumerate() {
         let qoute_denom = conf.price_resolution.quote_denom.to_string();
         let pool_infos = pool_infos.clone();
         let blacklisted_pools = blacklisted_pools.clone();
 
+        let prog = indicatif::ProgressBar::new_spinner();
+        prog.set_message("Fetching available routes...");
         let swap_routes = get_route(
             denom.to_string().as_str(),
             qoute_denom.as_str(),
@@ -202,10 +246,12 @@ async fn select_routes(
         .await
         .expect("Failed to get route");
 
+        prog.finish_and_clear();
+
         let route_choices = swap_routes
             .into_iter()
             .map(|routes| RouteChoice {
-                token_in: denom,
+                token_in: denom.as_str(),
                 routes,
                 token_map: &token_map,
                 pool_infos: &pool_infos,
@@ -213,11 +259,15 @@ async fn select_routes(
             })
             .collect::<Vec<_>>();
 
-        // clear terminal
-        // println!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-        let symbol = token_map[denom].symbol.as_str();
+        let symbol = token_map[denom.as_str()].symbol.as_str();
         let route_choice = Select::new(
-            format!("<{}/{}> `{}` route =", index + 1, total_denoms, symbol).as_str(),
+            format!(
+                "<{}/{}> `{}` route =",
+                prev_progress + index + 1,
+                total_denoms,
+                symbol
+            )
+            .as_str(),
             route_choices,
         )
         .with_render_config(
@@ -231,16 +281,14 @@ async fn select_routes(
             swap_routes: route_choice.routes,
         };
 
-        tracked_denoms.push(res);
+        msg.tracked_denoms.push(res);
 
         // keep saving result to file every time user selects a route
-        let msg = InstantiateMsg {
-            price_resolution_config: conf.price_resolution.clone(),
-            tracked_denoms: tracked_denoms.clone(),
-        };
         let msg = serde_json::to_string_pretty(&msg).expect("Failed to serialize msg");
         std::fs::write(target_file.clone(), msg).expect("Failed to write msg to file");
     }
+
+    println!("📟 Message generation completed!");
 }
 
 async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
