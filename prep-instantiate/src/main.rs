@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use inquire::{
     ui::{IndexPrefix, RenderConfig},
-    Select,
+    MultiSelect, Select,
 };
 use num_format::{Locale, ToFormattedString};
 use prep_instantiate::{
@@ -227,13 +227,12 @@ async fn select_routes(
 
     let mut msg: InstantiateMsg = if target_file.exists() {
         match mode {
-            Mode::Continue => {
+            Mode::Reset => config_only_msg,
+            Mode::Continue | Mode::Edit => {
                 let msg =
                     std::fs::read_to_string(target_file.clone()).expect("Failed to read file");
                 serde_json::from_str(&msg).expect("Failed to parse msg")
             }
-            Mode::Reset => config_only_msg,
-            Mode::Edit => todo!(),
         }
     } else {
         config_only_msg
@@ -241,6 +240,12 @@ async fn select_routes(
 
     let prev_progress = msg.tracked_denoms.len();
     let existing_tracked_denoms = msg.tracked_denoms.clone();
+
+    let tracked_denoms = msg.tracked_denoms.clone();
+    let denom_refs: HashMap<_, _> = tracked_denoms
+        .iter()
+        .map(|tracked| (tracked.denom.as_str(), tracked.denom.as_str()))
+        .collect();
 
     let denoms: Box<dyn Iterator<Item = String>> = match mode {
         Mode::Continue => {
@@ -253,7 +258,41 @@ async fn select_routes(
             Box::new(pending_denoms)
         }
         Mode::Reset => Box::new(conf.tracked_denoms.into_iter()),
-        Mode::Edit => todo!(),
+        Mode::Edit => {
+            let route_choices = msg
+                .tracked_denoms
+                .clone()
+                .into_iter()
+                .map(|tracked_denom| RouteChoice {
+                    token_in: denom_refs[tracked_denom.denom.as_str()],
+                    routes: tracked_denom.swap_routes,
+                    token_map: &token_map,
+                    pool_infos: &pool_infos,
+                    liquidities: &liquidities,
+                })
+                .collect::<Vec<_>>();
+
+            let editing_denoms = MultiSelect::new(
+                "Select tracked denoms & their routes to edit",
+                route_choices,
+            )
+            .with_render_config(
+                RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
+            )
+            .prompt()
+            .unwrap()
+            .into_iter()
+            .map(|route_choice| route_choice.token_in.to_string())
+            .collect::<Vec<_>>();
+
+            // filter edit denoms out of  existing tracked denoms
+            msg.tracked_denoms = existing_tracked_denoms
+                .into_iter()
+                .filter(|tracked| !editing_denoms.contains(&tracked.denom))
+                .collect();
+
+            Box::new(editing_denoms.into_iter())
+        }
     };
 
     for (index, denom) in denoms.enumerate() {
