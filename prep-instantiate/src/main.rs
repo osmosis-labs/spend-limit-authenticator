@@ -48,10 +48,10 @@ enum MessageCommand {
         /// the default behavior is to continue from that state, except `--reset` flag is set.
         target_file: PathBuf,
 
-        /// Ensure that message generation always starts from scratch instead of continuing from
-        /// previous state.
-        #[arg(long, default_value_t = false)]
-        reset: bool,
+        /// Mode for message generation, `continue` will continue from previous state,
+        /// `reset` will start from scratch, `edit` will allow user to edit existing message.
+        #[arg(long, default_value_t = Mode::Continue)]
+        mode: Mode,
 
         /// Filtering out route that contains pool that is blacklisted.
         /// There are some pools that are not cw pool yet failed to calculate twap.
@@ -64,6 +64,23 @@ enum MessageCommand {
         #[arg(long)]
         latest_synced_pool: Option<u64>,
     },
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+pub enum Mode {
+    Continue,
+    Reset,
+    Edit,
+}
+
+impl Display for Mode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Mode::Continue => write!(f, "continue"),
+            Mode::Reset => write!(f, "reset"),
+            Mode::Edit => write!(f, "edit"),
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -96,7 +113,7 @@ async fn main() -> Result<()> {
         RootCommand::Message { cmd } => match cmd {
             MessageCommand::Generate {
                 target_file,
-                reset,
+                mode,
                 blacklisted_pools,
                 latest_synced_pool,
             } => {
@@ -108,7 +125,7 @@ async fn main() -> Result<()> {
                     target_file,
                     blacklisted_pools,
                     latest_synced_pool,
-                    reset,
+                    mode,
                 )
                 .await;
             }
@@ -184,7 +201,7 @@ async fn select_routes(
     target_file: PathBuf,
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
-    reset: bool,
+    mode: Mode,
 ) {
     let prog = indicatif::ProgressBar::new_spinner();
 
@@ -203,30 +220,40 @@ async fn select_routes(
 
     let total_denoms = conf.tracked_denoms.len();
 
-    // if not reset, it will try to continue from previous state if exists
-    let mut msg: InstantiateMsg = if !reset && target_file.exists() {
-        let msg = std::fs::read_to_string(target_file.clone()).expect("Failed to read file");
-        serde_json::from_str(&msg).expect("Failed to parse msg")
-    } else {
-        InstantiateMsg {
-            price_resolution_config: conf.price_resolution.clone(),
-            tracked_denoms: vec![],
+    let config_only_msg = InstantiateMsg {
+        price_resolution_config: conf.price_resolution.clone(),
+        tracked_denoms: vec![],
+    };
+
+    let mut msg: InstantiateMsg = if target_file.exists() {
+        match mode {
+            Mode::Continue => {
+                let msg =
+                    std::fs::read_to_string(target_file.clone()).expect("Failed to read file");
+                serde_json::from_str(&msg).expect("Failed to parse msg")
+            }
+            Mode::Reset => config_only_msg,
+            Mode::Edit => todo!(),
         }
+    } else {
+        config_only_msg
     };
 
     let prev_progress = msg.tracked_denoms.len();
     let existing_tracked_denoms = msg.tracked_denoms.clone();
 
-    let denoms: Box<dyn Iterator<Item = String>> = if reset {
-        Box::new(conf.tracked_denoms.into_iter())
-    } else {
-        // find vec of denoms that are not yet selected
-        let pending_denoms = conf.tracked_denoms.into_iter().filter(|denom| {
-            !existing_tracked_denoms
-                .iter()
-                .any(|tracked| tracked.denom == *denom)
-        });
-        Box::new(pending_denoms)
+    let denoms: Box<dyn Iterator<Item = String>> = match mode {
+        Mode::Continue => {
+            // find vec of denoms that are not yet selected
+            let pending_denoms = conf.tracked_denoms.into_iter().filter(|denom| {
+                !existing_tracked_denoms
+                    .iter()
+                    .any(|tracked| tracked.denom == *denom)
+            });
+            Box::new(pending_denoms)
+        }
+        Mode::Reset => Box::new(conf.tracked_denoms.into_iter()),
+        Mode::Edit => todo!(),
     };
 
     for (index, denom) in denoms.enumerate() {
