@@ -196,6 +196,15 @@ impl<'a> Display for RouteChoice<'a> {
     }
 }
 
+struct AssetChoice<'a>(RouteChoice<'a>);
+
+impl Display for AssetChoice<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let token_in_symbol = self.0.token_map[self.0.token_in].symbol.as_str();
+        write!(f, "{} | {}", token_in_symbol, self.0)
+    }
+}
+
 async fn select_routes(
     conf: Config,
     target_file: PathBuf,
@@ -263,12 +272,14 @@ async fn select_routes(
                 .tracked_denoms
                 .clone()
                 .into_iter()
-                .map(|tracked_denom| RouteChoice {
-                    token_in: denom_refs[tracked_denom.denom.as_str()],
-                    routes: tracked_denom.swap_routes,
-                    token_map: &token_map,
-                    pool_infos: &pool_infos,
-                    liquidities: &liquidities,
+                .map(|tracked_denom| {
+                    AssetChoice(RouteChoice {
+                        token_in: denom_refs[tracked_denom.denom.as_str()],
+                        routes: tracked_denom.swap_routes,
+                        token_map: &token_map,
+                        pool_infos: &pool_infos,
+                        liquidities: &liquidities,
+                    })
                 })
                 .collect::<Vec<_>>();
 
@@ -282,7 +293,7 @@ async fn select_routes(
             .prompt()
             .unwrap()
             .into_iter()
-            .map(|route_choice| route_choice.token_in.to_string())
+            .map(|asset_choice| asset_choice.0.token_in.to_string())
             .collect::<Vec<_>>();
 
             // filter edit denoms out of  existing tracked denoms
