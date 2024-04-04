@@ -15,21 +15,43 @@ use std::{
     path::PathBuf,
 };
 
-/// Prepare instantiate msg for spend-limit contract
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[command(subcommand)]
-    command: Commands,
+#[derive(Parser)]
+#[clap(author, version,about, long_about = None)]
+#[clap(propagate_version = true)]
+pub struct Program {
+    #[clap(subcommand)]
+    pub(crate) cmd: RootCommand,
 }
 
 #[derive(Subcommand, Debug)]
-enum Commands {
+enum RootCommand {
+    /// Message generation/editing commands
+    #[clap(alias = "msg")]
+    Message {
+        #[clap(subcommand)]
+        cmd: MessageCommand,
+    },
+
+    /// Token related commands
+    Token {
+        #[clap(subcommand)]
+        cmd: TokenCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum MessageCommand {
     /// Generate instantiate msg for spend-limit contract
-    GenMsg {
-        /// File to write resulted message to
-        #[arg(long)]
-        write_to: PathBuf,
+    #[clap(alias = "gen")]
+    Generate {
+        /// File to write resulted message to, if there is valid existing message,
+        /// the default behavior is to continue from that state, except `--reset` flag is set.
+        target_file: PathBuf,
+
+        /// Ensure that message generation always starts from scratch instead of continuing from
+        /// previous state.
+        #[arg(long, default_value_t = false)]
+        reset: bool,
 
         /// Filtering out route that contains pool that is blacklisted.
         /// There are some pools that are not cw pool yet failed to calculate twap.
@@ -42,9 +64,12 @@ enum Commands {
         #[arg(long)]
         latest_synced_pool: Option<u64>,
     },
+}
 
+#[derive(Subcommand, Debug)]
+enum TokenCommand {
     /// List tokens in the format that is easiliy copy-pastable to config.toml
-    ListTokens {
+    List {
         /// Sort tokens by
         #[arg(long)]
         sort_by: SortBy,
@@ -65,33 +90,39 @@ enum SortBy {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Program::parse();
 
-    match args.command {
-        Commands::GenMsg {
-            write_to,
-            blacklisted_pools,
-            latest_synced_pool,
-        } => {
-            let conf: Config = toml::from_str(include_str!("../config.toml"))?;
+    match args.cmd {
+        RootCommand::Message { cmd } => match cmd {
+            MessageCommand::Generate {
+                target_file,
+                reset: _, // TODO: contunue from previous state if not reset
+                blacklisted_pools,
+                latest_synced_pool,
+            } => {
+                // TODO: expose config file location as an argument
+                let conf: Config = toml::from_str(include_str!("../config.toml"))?;
 
-            select_routes(conf, write_to, blacklisted_pools, latest_synced_pool).await;
-        }
-        Commands::ListTokens { sort_by, verbose } => {
-            get_tokens_sorted_by_24h_volume(sort_by)
-                .await
-                .iter()
-                .for_each(|token| {
-                    print!("\"{}\", # {} - {}", token.denom, token.symbol, token.name);
-                    if verbose {
-                        print!(
-                            " (volume_24h = {}, liquidity = {})",
-                            token.volume_24h, token.liquidity
-                        );
-                    }
-                    println!();
-                });
-        }
+                select_routes(conf, target_file, blacklisted_pools, latest_synced_pool).await;
+            }
+        },
+        RootCommand::Token { cmd } => match cmd {
+            TokenCommand::List { sort_by, verbose } => {
+                get_tokens_sorted_by_24h_volume(sort_by)
+                    .await
+                    .iter()
+                    .for_each(|token| {
+                        print!("\"{}\", # {} - {}", token.denom, token.symbol, token.name);
+                        if verbose {
+                            print!(
+                                " (volume_24h = {}, liquidity = {})",
+                                token.volume_24h, token.liquidity
+                            );
+                        }
+                        println!();
+                    });
+            }
+        },
     }
 
     Ok(())
@@ -143,7 +174,7 @@ impl<'a> Display for RouteChoice<'a> {
 
 async fn select_routes(
     conf: Config,
-    write_to: PathBuf,
+    target_file: PathBuf,
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
 ) {
@@ -208,7 +239,7 @@ async fn select_routes(
             tracked_denoms: tracked_denoms.clone(),
         };
         let msg = serde_json::to_string_pretty(&msg).expect("Failed to serialize msg");
-        std::fs::write(write_to.clone(), msg).expect("Failed to write msg to file");
+        std::fs::write(target_file.clone(), msg).expect("Failed to write msg to file");
     }
 }
 
