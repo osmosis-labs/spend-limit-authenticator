@@ -8,7 +8,7 @@ use inquire::{
     Confirm, MultiSelect, Select,
 };
 use num_format::{Locale, ToFormattedString};
-use prep_instantiate::{
+use sl_util::{
     arithmetic_twap_to_now, error::PrepError, get_pool_liquidities, get_pools, get_route,
     get_tokens, Config, PoolInfo, Result, TokenInfo,
 };
@@ -135,7 +135,7 @@ async fn main() -> std::result::Result<(), String> {
                 latest_synced_pool,
             } => {
                 // TODO: expose config file location as an argument
-                let conf: Config = toml::from_str(include_str!("../config.toml"))
+                let conf: Config = toml::from_str(include_str!("../default-config.toml"))
                     .map_err(|e| format!("😢 {}", e))?;
 
                 select_routes(
