@@ -7,6 +7,7 @@ version = "0.1.0"
 
 [dependencies]
 clap = {version = "4.5.4", features = ["derive"]}
+colored = "2.1.0"
 cosmwasm-std = "2.0.0"
 error-chain = "0.12.4"
 futures = "0.3.30"

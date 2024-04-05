@@ -9,6 +9,7 @@ error_chain! {
         Toml(toml::de::Error);
         Join(tokio::task::JoinError);
         DateTimeFormat(time::error::Format);
+        Inquire(inquire::InquireError);
         PrepError(PrepError);
     }
 }

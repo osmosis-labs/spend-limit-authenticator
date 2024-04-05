@@ -1,13 +1,15 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+use colored::Colorize;
+use indicatif::ProgressBar;
 use inquire::{
     ui::{IndexPrefix, RenderConfig},
-    MultiSelect, Select,
+    Confirm, MultiSelect, Select,
 };
 use num_format::{Locale, ToFormattedString};
 use prep_instantiate::{
-    error::PrepError, get_pool_liquidities, get_pools, get_route, get_tokens, Config, PoolInfo,
-    Result, TokenInfo,
+    arithmetic_twap_to_now, error::PrepError, get_pool_liquidities, get_pools, get_route,
+    get_tokens, Config, PoolInfo, Result, TokenInfo,
 };
 use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, SwapAmountInRoute, TrackedDenom};
@@ -257,20 +259,20 @@ async fn select_routes(
         .collect();
 
     // fetch token info, pool info, and pool liquidity
-    let prog = indicatif::ProgressBar::new_spinner();
+    let spinner = ProgressBar::new_spinner();
 
-    prog.set_message("Fetching token info...");
+    spinner.set_message("Fetching token info...");
     let token_map = get_token_map().await.expect("Failed to get prices");
 
-    prog.set_message("Fetching general pool info...");
+    spinner.set_message("Fetching general pool info...");
     let pool_infos = get_pools().await.expect("Failed to get pools");
 
-    prog.set_message("Fetching pools' liquidity...");
+    spinner.set_message("Fetching pools' liquidity...");
     let liquidities = get_pool_liquidities()
         .await
         .expect("Failed to get pool liquidities");
 
-    prog.finish_and_clear();
+    spinner.finish_and_clear();
 
     let denoms: Box<dyn Iterator<Item = String>> = match mode {
         Mode::Continue => {
@@ -332,8 +334,8 @@ async fn select_routes(
         let pool_infos = pool_infos.clone();
         let blacklisted_pools = blacklisted_pools.clone();
 
-        let prog = indicatif::ProgressBar::new_spinner();
-        prog.set_message("Fetching available routes...");
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_message("Fetching available routes...");
         let swap_routes = get_route(
             denom.to_string().as_str(),
             qoute_denom.as_str(),
@@ -344,42 +346,95 @@ async fn select_routes(
         .await
         .expect("Failed to get route");
 
-        prog.finish_and_clear();
+        spinner.finish_and_clear();
 
-        let route_choices = swap_routes
-            .into_iter()
-            .map(|routes| RouteChoice {
-                token_in: denom.as_str(),
-                routes,
-                token_map: &token_map,
-                pool_infos: &pool_infos,
-                liquidities: &liquidities,
-            })
-            .collect::<Vec<_>>();
+        // select route
+        'select_route: loop {
+            let route_choices = swap_routes
+                .clone()
+                .into_iter()
+                .map(|routes| RouteChoice {
+                    token_in: denom.as_str(),
+                    routes,
+                    token_map: &token_map,
+                    pool_infos: &pool_infos,
+                    liquidities: &liquidities,
+                })
+                .collect::<Vec<_>>();
 
-        let symbol = token_map[denom.as_str()].symbol.as_str();
-        let route_choice = Select::new(
-            format!(
-                "<{}/{}> `{}` route =",
-                progress + index + 1,
-                total_selection_count,
-                symbol
+            let symbol = token_map[denom.as_str()].symbol.as_str();
+            let route_choice = Select::new(
+                format!(
+                    "<{}/{}> `{}` route =",
+                    progress + index + 1,
+                    total_selection_count,
+                    symbol
+                )
+                .as_str(),
+                route_choices,
             )
-            .as_str(),
-            route_choices,
-        )
-        .with_render_config(
-            RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
-        )
-        .prompt()
-        .unwrap();
+            .with_render_config(
+                RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
+            )
+            .prompt()?;
 
-        let res = TrackedDenom {
-            denom: denom.to_string(),
-            swap_routes: route_choice.routes,
-        };
+            let mut token_in_denom = denom.to_string();
+            for route in route_choice.routes.iter() {
+                let spinner = ProgressBar::new_spinner();
+                spinner.set_message(format!(
+                    "Try fetching twap for {}/{} on pool {} ...",
+                    token_in_denom, route.token_out_denom, route.pool_id
+                ));
+                let twap_res = arithmetic_twap_to_now(
+                    route.pool_id,
+                    token_in_denom.as_str(),
+                    route.token_out_denom.as_str(),
+                    time::OffsetDateTime::now_utc()
+                        .checked_sub(time::Duration::hours(1))
+                        .unwrap(),
+                )
+                .await;
 
-        msg.tracked_denoms.push(res);
+                spinner.finish_and_clear();
+
+                let token_in_symbol = token_map[&token_in_denom].symbol.as_str();
+                let token_out_symbol = token_map[&route.token_out_denom].symbol.as_str();
+                match twap_res {
+                    Ok(twap) => {
+                        let confirm = Confirm::new(&format!(
+                            "1hr arithmatic twap for {}/{} on pool {} is {}, OK?",
+                            token_in_symbol, token_out_symbol, route.pool_id, twap
+                        ))
+                        .prompt()?;
+
+                        // if not ok, restart selecting route
+                        if !confirm {
+                            continue 'select_route;
+                        }
+                    }
+                    Err(e) => {
+                        let m = format!(
+                            "⚠️ Failed to fetch twap for {}/{}: {}. Try another route?",
+                            token_in_symbol, token_out_symbol, e
+                        );
+                        eprintln!("{}", m.yellow().bold());
+                        // if failed to fetch twap, restart selecting route
+                        continue 'select_route;
+                    }
+                }
+
+                // update token_in_denom for next route
+                token_in_denom = route.token_out_denom.clone();
+            }
+
+            let res = TrackedDenom {
+                denom: denom.to_string(),
+                swap_routes: route_choice.routes,
+            };
+
+            msg.tracked_denoms.push(res);
+            break;
+        }
 
         // keep saving result to file every time user selects a route
         let msg = serde_json::to_string_pretty(&msg).expect("Failed to serialize msg");
