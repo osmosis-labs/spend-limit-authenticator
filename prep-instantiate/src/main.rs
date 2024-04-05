@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
 use colored::Colorize;
+use cosmwasm_std::Decimal;
 use indicatif::ProgressBar;
 use inquire::{
     ui::{IndexPrefix, RenderConfig},
@@ -387,6 +388,7 @@ async fn select_routes(
             .prompt()?;
 
             let mut token_in_denom = denom.to_string();
+            let mut resulted_price = Decimal::one();
             for route in route_choice.routes.iter() {
                 let spinner = ProgressBar::new_spinner();
                 spinner.set_message(format!(
@@ -409,23 +411,30 @@ async fn select_routes(
                 let token_out_symbol = token_map[&route.token_out_denom].symbol.as_str();
                 match twap_res {
                     Ok(twap) => {
-                        if skip_manual_price_confirmation {
-                            println!(
-                                "\t#{} {}/{} = {}",
-                                route.pool_id, token_in_symbol, token_out_symbol, twap
-                            );
-                        } else {
-                            let confirm = Confirm::new(&format!(
-                                "#{} {}/{} = {}, OK?",
-                                route.pool_id, token_in_symbol, token_out_symbol, twap
-                            ))
-                            .prompt()?;
+                        // if routes has only 1 hop, just confirm the resulted price
+                        // or else it will just appears to be duplicated confirmation
+                        if route_choice.routes.len() > 1 {
+                            if skip_manual_price_confirmation {
+                                println!(
+                                    "\t#{} {}/{} = {}",
+                                    route.pool_id, token_in_symbol, token_out_symbol, twap
+                                );
+                            } else {
+                                let confirm = Confirm::new(&format!(
+                                    "#{} {}/{} = {}, OK?",
+                                    route.pool_id, token_in_symbol, token_out_symbol, twap
+                                ))
+                                .prompt()?;
 
-                            // if not ok, restart selecting route
-                            if !confirm {
-                                continue 'select_route;
+                                // if not ok, restart selecting route
+                                if !confirm {
+                                    continue 'select_route;
+                                }
                             }
                         }
+
+                        // update resulted price for next route
+                        resulted_price = resulted_price * twap
                     }
                     Err(e) => {
                         let m = format!(
@@ -440,6 +449,28 @@ async fn select_routes(
 
                 // update token_in_denom for next route
                 token_in_denom = route.token_out_denom.clone();
+            }
+
+            if skip_manual_price_confirmation {
+                println!(
+                    "\t🪙 {}/{} = {}",
+                    token_map[denom.as_str()].symbol,
+                    token_map[qoute_denom.as_str()].symbol,
+                    resulted_price
+                );
+            } else {
+                let confirm = Confirm::new(&format!(
+                    "🪙 {}/{} = {}, OK?",
+                    token_map[denom.as_str()].symbol,
+                    token_map[qoute_denom.as_str()].symbol,
+                    resulted_price
+                ))
+                .prompt()?;
+
+                // if not ok, restart selecting route
+                if !confirm {
+                    continue 'select_route;
+                }
             }
 
             let res = TrackedDenom {
