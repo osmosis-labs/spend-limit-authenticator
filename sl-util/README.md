@@ -4,6 +4,16 @@ Utility program for the spend limit contract.
 
 This is mainly used to generate message for the spend limit contract which can be complicated to setup.
 
+To use this program, build this program by running
+
+```bash
+cargo build --release
+```
+
+and find the binary in `target/release/sl-util`.
+
+or just replace `sl-util` with `cargo run` within the crate directory while following the instructions below.
+
 It finds best routes for each tracked denom through [sqs](https://github.com/osmosis-labs/sqs) to construct the instantiate message alongside with other necessary information defined in config file (toml format).
 
 You can generate `config.toml` starter through the following command:
