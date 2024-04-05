@@ -227,8 +227,6 @@ async fn select_routes(
 
     prog.finish_and_clear();
 
-    let total_denoms = conf.tracked_denoms.len();
-
     let config_only_msg = InstantiateMsg {
         price_resolution_config: conf.price_resolution.clone(),
         tracked_denoms: vec![],
@@ -247,7 +245,8 @@ async fn select_routes(
         config_only_msg
     };
 
-    let prev_progress = msg.tracked_denoms.len();
+    let mut total_selection_count = conf.tracked_denoms.len();
+    let mut progress = msg.tracked_denoms.len();
     let existing_tracked_denoms = msg.tracked_denoms.clone();
 
     let tracked_denoms = msg.tracked_denoms.clone();
@@ -302,6 +301,11 @@ async fn select_routes(
                 .filter(|tracked| !editing_denoms.contains(&tracked.denom))
                 .collect();
 
+            // for edit mode, progress starts from 0 since it only cares about what will be edited, not the whole denoms in config
+            progress = 0;
+            // for edit mode, selection count is the count of denoms that are to be edited
+            total_selection_count = editing_denoms.len();
+
             Box::new(editing_denoms.into_iter())
         }
     };
@@ -340,8 +344,8 @@ async fn select_routes(
         let route_choice = Select::new(
             format!(
                 "<{}/{}> `{}` route =",
-                prev_progress + index + 1,
-                total_denoms,
+                progress + index + 1,
+                total_selection_count,
                 symbol
             )
             .as_str(),
