@@ -4,12 +4,17 @@ Utility program for the spend limit contract.
 
 This is mainly used to generate message for the spend limit contract which can be complicated to setup.
 
-It finds best routes for each tracked denom through [sqs](https://github.com/osmosis-labs/sqs) to construct the instantiate message alongside with other necessary information defined in [config.toml](./config.toml).
+It finds best routes for each tracked denom through [sqs](https://github.com/osmosis-labs/sqs) to construct the instantiate message alongside with other necessary information defined in config file (toml format).
 
-To run the program, edit [config.toml](./config.toml) to fits your needs.
+You can generate `config.toml` starter through the following command:
 
-As a tool to help coming up with comprehensive tracked denoms in [config.toml](./config.toml), you can use `sl-util list-tokens` (use `-h` to see more options).
-This will list all tokens avaialble through [imparator's api](https://api-osmosis.imperator.co/swagger/) in the format that is copy-pasteable to [config.toml](./config.toml).
+```bash
+sl-util config example > config.toml
+```
+
+edit `config.toml` to fit your needs.
+
+You can use `sl-util token list` to list all tokens available through [imperator's api](https://api-osmosis.imperator.co/swagger/) in the format that is copy-pasteable to `config.toml`.
 
 ```bash
 sl-util token list
@@ -18,7 +23,7 @@ sl-util token list
 `sl-util message generate <TARGET_FILE>` this generates instantiate message which will be written to `<TARGET_FILE>`.
 
 ```bash
-sl-util message generate instantiate-msg.json
+sl-util message generate instantiate-msg.json --config config.toml
 ```
 
 So that we can use the msg with `osmosisd tx wasm instantiate` command.
