@@ -75,7 +75,7 @@ enum MessageCommand {
 
         /// Config file to use for message generation, if not provided, default config will be used.
         #[arg(long)]
-        config: Option<PathBuf>,
+        config: PathBuf,
     },
 }
 
@@ -139,13 +139,9 @@ async fn main() -> std::result::Result<(), String> {
                 latest_synced_pool,
                 config,
             } => {
-                let conf = if let Some(config) = config {
-                    toml::from_str(
-                        &std::fs::read_to_string(config).map_err(|e| format!("😢 {}", e))?,
-                    )
-                } else {
-                    toml::from_str(include_str!("../default-config.toml"))
-                }
+                let conf = toml::from_str(
+                    &std::fs::read_to_string(config).map_err(|e| format!("😢 {}", e))?,
+                )
                 .map_err(|e| format!("😢 {}", e))?;
 
                 select_routes(
