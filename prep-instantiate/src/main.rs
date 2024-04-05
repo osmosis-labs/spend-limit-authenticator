@@ -386,7 +386,13 @@ async fn select_routes(
         std::fs::write(target_file.clone(), msg).expect("Failed to write msg to file");
     }
 
-    println!("📟 Message generation completed!");
+    println!(
+        "{}",
+        match mode {
+            Mode::Reset | Mode::Continue => "📟 Message generation completed!",
+            Mode::Edit => "✍️ Message editing completed!",
+        }
+    );
     return Ok(());
 }
 
