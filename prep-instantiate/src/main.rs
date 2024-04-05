@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand, ValueEnum};
+
 use inquire::{
     ui::{IndexPrefix, RenderConfig},
     MultiSelect, Select,
 };
 use num_format::{Locale, ToFormattedString};
 use prep_instantiate::{
-    get_pool_liquidities, get_pools, get_route, get_tokens, Config, PoolInfo, Result, TokenInfo,
+    error::PrepError, get_pool_liquidities, get_pools, get_route, get_tokens, Config, PoolInfo,
+    Result, TokenInfo,
 };
 use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, SwapAmountInRoute, TrackedDenom};
@@ -106,7 +108,7 @@ enum SortBy {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> std::result::Result<(), String> {
     let args = Program::parse();
 
     match args.cmd {
@@ -118,7 +120,8 @@ async fn main() -> Result<()> {
                 latest_synced_pool,
             } => {
                 // TODO: expose config file location as an argument
-                let conf: Config = toml::from_str(include_str!("../config.toml"))?;
+                let conf: Config = toml::from_str(include_str!("../config.toml"))
+                    .map_err(|e| format!("😢 {}", e))?;
 
                 select_routes(
                     conf,
@@ -127,7 +130,8 @@ async fn main() -> Result<()> {
                     latest_synced_pool,
                     mode,
                 )
-                .await;
+                .await
+                .map_err(|e| format!("😢 {}", e))?;
             }
         },
         RootCommand::Token { cmd } => match cmd {
@@ -211,22 +215,7 @@ async fn select_routes(
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
     mode: Mode,
-) {
-    let prog = indicatif::ProgressBar::new_spinner();
-
-    prog.set_message("Fetching token info...");
-    let token_map = get_token_map().await.expect("Failed to get prices");
-
-    prog.set_message("Fetching general pool info...");
-    let pool_infos = get_pools().await.expect("Failed to get pools");
-
-    prog.set_message("Fetching pools' liquidity...");
-    let liquidities = get_pool_liquidities()
-        .await
-        .expect("Failed to get pool liquidities");
-
-    prog.finish_and_clear();
-
+) -> Result<()> {
     let config_only_msg = InstantiateMsg {
         price_resolution_config: conf.price_resolution.clone(),
         tracked_denoms: vec![],
@@ -238,7 +227,19 @@ async fn select_routes(
             Mode::Continue | Mode::Edit => {
                 let msg =
                     std::fs::read_to_string(target_file.clone()).expect("Failed to read file");
-                serde_json::from_str(&msg).expect("Failed to parse msg")
+                let msg: InstantiateMsg = serde_json::from_str(&msg).expect("Failed to parse msg");
+                // test if denoms in state has denoms that are not in config
+                for tracked_denom in msg.tracked_denoms.iter() {
+                    let denom_does_not_appear_in_config =
+                        !conf.tracked_denoms.contains(&tracked_denom.denom);
+                    if denom_does_not_appear_in_config {
+                        return Err(PrepError::InvalidState {
+                            denom: tracked_denom.denom.clone(),
+                        }
+                        .into());
+                    }
+                }
+                msg
             }
         }
     } else {
@@ -254,6 +255,22 @@ async fn select_routes(
         .iter()
         .map(|tracked| (tracked.denom.as_str(), tracked.denom.as_str()))
         .collect();
+
+    // fetch token info, pool info, and pool liquidity
+    let prog = indicatif::ProgressBar::new_spinner();
+
+    prog.set_message("Fetching token info...");
+    let token_map = get_token_map().await.expect("Failed to get prices");
+
+    prog.set_message("Fetching general pool info...");
+    let pool_infos = get_pools().await.expect("Failed to get pools");
+
+    prog.set_message("Fetching pools' liquidity...");
+    let liquidities = get_pool_liquidities()
+        .await
+        .expect("Failed to get pool liquidities");
+
+    prog.finish_and_clear();
 
     let denoms: Box<dyn Iterator<Item = String>> = match mode {
         Mode::Continue => {
@@ -370,6 +387,7 @@ async fn select_routes(
     }
 
     println!("📟 Message generation completed!");
+    return Ok(());
 }
 
 async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {
