@@ -57,6 +57,11 @@ enum MessageCommand {
         #[arg(long, default_value_t = Mode::Continue)]
         mode: Mode,
 
+        /// By default, selecting a route requires going through manual twap price confirmation for sanity check.
+        /// This flag will skip that confirmation.
+        #[arg(long, default_value_t = false)]
+        skip_manual_price_confirmation: bool,
+
         /// Filtering out route that contains pool that is blacklisted.
         /// There are some pools that are not cw pool yet failed to calculate twap.
         #[arg(long, value_delimiter = ',')]
@@ -118,6 +123,7 @@ async fn main() -> std::result::Result<(), String> {
             MessageCommand::Generate {
                 target_file,
                 mode,
+                skip_manual_price_confirmation,
                 blacklisted_pools,
                 latest_synced_pool,
             } => {
@@ -131,6 +137,7 @@ async fn main() -> std::result::Result<(), String> {
                     blacklisted_pools,
                     latest_synced_pool,
                     mode,
+                    skip_manual_price_confirmation,
                 )
                 .await
                 .map_err(|e| format!("😢 {}", e))?;
@@ -217,6 +224,7 @@ async fn select_routes(
     blacklisted_pools: Vec<u64>,
     latest_synced_pool: Option<u64>,
     mode: Mode,
+    skip_manual_price_confirmation: bool,
 ) -> Result<()> {
     let config_only_msg = InstantiateMsg {
         price_resolution_config: conf.price_resolution.clone(),
@@ -401,15 +409,22 @@ async fn select_routes(
                 let token_out_symbol = token_map[&route.token_out_denom].symbol.as_str();
                 match twap_res {
                     Ok(twap) => {
-                        let confirm = Confirm::new(&format!(
-                            "1hr arithmatic twap for {}/{} on pool {} is {}, OK?",
-                            token_in_symbol, token_out_symbol, route.pool_id, twap
-                        ))
-                        .prompt()?;
+                        if skip_manual_price_confirmation {
+                            println!(
+                                "\t#{} {}/{} = {}",
+                                route.pool_id, token_in_symbol, token_out_symbol, twap
+                            );
+                        } else {
+                            let confirm = Confirm::new(&format!(
+                                "#{} {}/{} = {}, OK?",
+                                route.pool_id, token_in_symbol, token_out_symbol, twap
+                            ))
+                            .prompt()?;
 
-                        // if not ok, restart selecting route
-                        if !confirm {
-                            continue 'select_route;
+                            // if not ok, restart selecting route
+                            if !confirm {
+                                continue 'select_route;
+                            }
                         }
                     }
                     Err(e) => {
