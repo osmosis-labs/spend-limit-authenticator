@@ -41,6 +41,12 @@ enum RootCommand {
         #[clap(subcommand)]
         cmd: TokenCommand,
     },
+
+    /// Config related commands
+    Config {
+        #[clap(subcommand)]
+        cmd: ConfigCommand,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -125,6 +131,12 @@ impl Display for SortBy {
     }
 }
 
+#[derive(Subcommand, Debug)]
+enum ConfigCommand {
+    /// Print example config
+    Example {},
+}
+
 #[tokio::main]
 async fn main() -> std::result::Result<(), String> {
     let args = Program::parse();
@@ -171,6 +183,12 @@ async fn main() -> std::result::Result<(), String> {
                         }
                         println!();
                     });
+            }
+        },
+        RootCommand::Config { cmd } => match cmd {
+            ConfigCommand::Example {} => {
+                let example_config = include_str!("../example-config.toml");
+                println!("{}", example_config);
             }
         },
     }
