@@ -12,7 +12,6 @@ use prep_instantiate::{
     arithmetic_twap_to_now, error::PrepError, get_pool_liquidities, get_pools, get_route,
     get_tokens, Config, PoolInfo, Result, TokenInfo,
 };
-use serde::Serialize;
 use spend_limit::msg::{InstantiateMsg, SwapAmountInRoute, TrackedDenom};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -98,7 +97,7 @@ enum TokenCommand {
     /// List tokens in the format that is easiliy copy-pastable to config.toml
     List {
         /// Sort tokens by
-        #[arg(long)]
+        #[arg(long, default_value_t = SortBy::Volume24h)]
         sort_by: SortBy,
 
         /// Include all infos for each token
@@ -107,12 +106,19 @@ enum TokenCommand {
     },
 }
 
-#[derive(ValueEnum, Debug, Default, Serialize, Clone, Copy)]
-#[serde(rename_all = "kebab-case")]
+#[derive(ValueEnum, Debug, Clone, Copy)]
 enum SortBy {
-    #[default]
     Volume24h,
     Liquidity,
+}
+
+impl Display for SortBy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SortBy::Volume24h => write!(f, "volume24h"),
+            SortBy::Liquidity => write!(f, "liquidity"),
+        }
+    }
 }
 
 #[tokio::main]

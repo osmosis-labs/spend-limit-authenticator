@@ -10,25 +10,27 @@ As a tool to help coming up with comprehensive tracked denoms in [config.toml](.
 This will list all tokens avaialble through [imparator's api](https://api-osmosis.imperator.co/swagger/) in the format that is copy-pasteable to [config.toml](./config.toml).
 
 ```bash
-cargo run list-tokens
+cargo run token list
 ```
 
-`cargo run gen-msg` this generates instantiate message which will be written to stdout, so it can be redirected to a file
+`cargo run message generate <TARGET_FILE>` this generates instantiate message which will be written to `<TARGET_FILE>`.
 
 ```bash
-cargo run gen-msg > instantiate-msg.json
+cargo run message generate instantiate-msg.json
 ```
 
-or use it directly in the `osmosisd tx wasm instantiate` command.
+So that we can use the msg with `osmosisd tx wasm instantiate` command.
 
 ```bash
-osmosisd tx wasm instantiate $CODE_ID $(cargo run gen-msg) --label "spend-limit" --no-admin --gas-prices 0.25uosmo --gas auto --gas-adjustment 1.5 --from $ACCOUNT
+osmosisd tx wasm instantiate $CODE_ID "$(cat instantiate-msg.json)" --label "spend-limit" --no-admin --gas-prices 0.25uosmo --gas auto --gas-adjustment 1.5 --from $ACCOUNT
 ```
 
-Because the data comes from mainnet and your testing environment may have non up-to-date data, you may want to use `--latest-synced-pool` flag to filter out routes that are not available in your testing environment.
+or elsewhere appropriate.
+
+Because this program use mainnet data, if you are testing it with any non-mainnet environment, the data may not be up-to-date, you may want to use `--latest-synced-pool` flag to filter out routes that are not available in your testing environment.
 
 ```bash
-cargo run gen-msg --latest-synced-pool 1499
+cargo run message generate instantiate-msg.json --latest-synced-pool 1499
 ```
 
 All resulted routes will have no cw pool or unsynced pool that will make instantiation failed because twap will fail to calculate. But there are cases where other pool fails to calculate twap as well, the error message will tell you which once you tried to instantiate.
@@ -36,5 +38,7 @@ All resulted routes will have no cw pool or unsynced pool that will make instant
 You can remove routes that contains those pool by
 
 ```bash
-cargo run gen-msg --latest-synced-pool 1499 --blacklisted-pools 1260,1275,1066
+cargo run message generate instantiate-msg.json --latest-synced-pool 1499 --blacklisted-pools 1260,1275,1066
 ```
+
+For more options, please seek help from `-h` flag.
