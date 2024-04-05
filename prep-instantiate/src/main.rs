@@ -30,7 +30,7 @@ pub struct Program {
 #[derive(Subcommand, Debug)]
 enum RootCommand {
     /// Message generation/editing commands
-    #[clap(alias = "msg")]
+    #[clap(visible_alias = "msg")]
     Message {
         #[clap(subcommand)]
         cmd: MessageCommand,
@@ -46,7 +46,7 @@ enum RootCommand {
 #[derive(Subcommand, Debug)]
 enum MessageCommand {
     /// Generate instantiate msg for spend-limit contract
-    #[clap(alias = "gen")]
+    #[clap(visible_alias = "gen")]
     Generate {
         /// File to write resulted message to, if there is valid existing message,
         /// the default behavior is to continue from that state, except `--reset` flag is set.
