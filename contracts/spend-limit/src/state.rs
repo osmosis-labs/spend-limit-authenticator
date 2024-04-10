@@ -1,8 +1,9 @@
 use cw_storage_plus::{Item, Map};
 
 use crate::{
+    fee::UntrackedSpentFeeStore,
     price::{PriceInfoStore, PriceResolutionConfig},
-    spend_limit::{PreExecBalance, SpendingStore, UntrackedSpentFee},
+    spend_limit::{PreExecBalance, SpendingStore},
 };
 
 pub const SPENDINGS: SpendingStore<'_> = Map::new("spendings");
@@ -19,7 +20,7 @@ pub const PRE_EXEC_BALANCES: PreExecBalance<'_> = Map::new("pre_exec_balance");
 /// the fee is still deducted from the account but the spending is not tracked.
 /// In that case, we need to accumulate the fee in this storage and assert the limit later
 /// to prevent fee draining.
-pub const UNTRACKED_SPENT_FEES: UntrackedSpentFee<'_> = Map::new("untracked_spent_fees");
+pub const UNTRACKED_SPENT_FEES: UntrackedSpentFeeStore<'_> = Map::new("untracked_spent_fees");
 
 /// Configuration for the price resolution.
 pub const PRICE_RESOLUTION_CONFIG: Item<PriceResolutionConfig> =

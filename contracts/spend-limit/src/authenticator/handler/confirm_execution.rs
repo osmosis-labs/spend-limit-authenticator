@@ -93,6 +93,8 @@ mod tests {
         #[case] untracked_spent_fee: Vec<Coin>,
         #[case] expected: Result<Response, ContractError>,
     ) {
+        use crate::fee::UntrackedSpentFee;
+
         let fixed_balance = Coin::new(500, "uosmo");
         // Setup the environment
         let mut deps = mock_dependencies_with_balances(&[(
@@ -106,7 +108,14 @@ mod tests {
         let key = (&Addr::unchecked("account"), "2");
 
         UNTRACKED_SPENT_FEES
-            .save(&mut deps.storage, key, &untracked_spent_fee)
+            .save(
+                &mut deps.storage,
+                key,
+                &UntrackedSpentFee {
+                    fee: untracked_spent_fee.clone(),
+                    updated_at: mock_env().block.time,
+                },
+            )
             .unwrap();
 
         PRE_EXEC_BALANCES
@@ -183,7 +192,10 @@ mod tests {
                     UNTRACKED_SPENT_FEES
                         .may_load(deps.as_ref().storage, key)
                         .unwrap(),
-                    Some(untracked_spent_fee)
+                    Some(UntrackedSpentFee {
+                        fee: untracked_spent_fee,
+                        updated_at: mock_env().block.time,
+                    })
                 );
             }
         }

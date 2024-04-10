@@ -1,35 +1,39 @@
 use crate::authenticator::common::get_account_spending_fee;
 use crate::state::{PRE_EXEC_BALANCES, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
-use cosmwasm_std::{Coins, DepsMut, Env, Response};
+use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::TrackRequest;
+
+use super::validate_and_parse_params;
 
 pub fn track(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     TrackRequest {
         account,
         authenticator_id,
         fee_payer,
         fee_granter,
         fee,
+        authenticator_params,
         ..
     }: TrackRequest,
 ) -> Result<Response, ContractError> {
+    let params = validate_and_parse_params(authenticator_params)?;
     let key = (&account, authenticator_id.as_str());
 
     // add new fee to untracked spent fee, if confirm execution passed, it will be cleaned up
     // if execution or confirmation failed, it will be accumulated and check at authenticate
-    let mut untracked_spent_fee: Coins = UNTRACKED_SPENT_FEES
+    let untracked_spent_fee = UNTRACKED_SPENT_FEES
         .may_load(deps.storage, key)?
         .unwrap_or_default()
-        .try_into()?;
+        .accum(
+            get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee),
+            &params.reset_period,
+            env.block.time,
+        )?;
 
-    for fee in get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee) {
-        untracked_spent_fee.add(fee)?;
-    }
-
-    UNTRACKED_SPENT_FEES.save(deps.storage, key, &untracked_spent_fee.to_vec())?;
+    UNTRACKED_SPENT_FEES.save(deps.storage, key, &untracked_spent_fee)?;
 
     // force update pre_exec_balance, disregard the previous value
     let balances = deps.querier.query_all_balances(account.to_string())?;
@@ -42,6 +46,7 @@ pub fn track(
 mod tests {
     use super::*;
 
+    use crate::fee::UntrackedSpentFee;
     use crate::period::Period;
     use crate::{spend_limit::SpendLimitParams, state::UNTRACKED_SPENT_FEES};
     use cosmwasm_std::{
@@ -86,7 +91,13 @@ mod tests {
         let untracked_spent_fee = UNTRACKED_SPENT_FEES
             .load(deps.as_ref().storage, key)
             .unwrap_or_default();
-        assert_eq!(untracked_spent_fee, fee);
+        assert_eq!(
+            untracked_spent_fee,
+            UntrackedSpentFee {
+                fee,
+                updated_at: mock_env().block.time,
+            }
+        );
     }
 
     #[test]
@@ -132,7 +143,13 @@ mod tests {
         let untracked_spent_fee = UNTRACKED_SPENT_FEES
             .load(deps.as_ref().storage, key)
             .unwrap_or_default();
-        assert_eq!(untracked_spent_fee, fee);
+        assert_eq!(
+            untracked_spent_fee,
+            UntrackedSpentFee {
+                fee,
+                updated_at: mock_env().block.time,
+            }
+        );
     }
 
     #[test]
@@ -144,7 +161,14 @@ mod tests {
         let prev_untracked_spent_fee = vec![Coin::new(500, "uosmo")];
 
         UNTRACKED_SPENT_FEES
-            .save(deps.as_mut().storage, key, &prev_untracked_spent_fee)
+            .save(
+                deps.as_mut().storage,
+                key,
+                &UntrackedSpentFee {
+                    fee: prev_untracked_spent_fee,
+                    updated_at: mock_env().block.time,
+                },
+            )
             .unwrap();
 
         let fee = vec![Coin::new(1000, "uosmo"), Coin::new(1000, "usdc")];
@@ -185,7 +209,10 @@ mod tests {
 
         assert_eq!(
             untracked_spent_fee,
-            vec![Coin::new(1500, "uosmo"), Coin::new(1000, "usdc")]
+            UntrackedSpentFee {
+                fee: vec![Coin::new(1500, "uosmo"), Coin::new(1000, "usdc")],
+                updated_at: mock_env().block.time,
+            }
         );
     }
 
@@ -198,7 +225,14 @@ mod tests {
         let prev_untracked_spent_fee = vec![Coin::new(500, "uosmo")];
 
         UNTRACKED_SPENT_FEES
-            .save(deps.as_mut().storage, key, &prev_untracked_spent_fee)
+            .save(
+                deps.as_mut().storage,
+                key,
+                &UntrackedSpentFee {
+                    fee: prev_untracked_spent_fee.clone(),
+                    updated_at: mock_env().block.time,
+                },
+            )
             .unwrap();
 
         let fee = vec![Coin::new(1000, "uosmo"), Coin::new(1000, "usdc")];
@@ -237,7 +271,13 @@ mod tests {
             .load(deps.as_ref().storage, key)
             .unwrap_or_default();
 
-        assert_eq!(untracked_spent_fee, prev_untracked_spent_fee);
+        assert_eq!(
+            untracked_spent_fee,
+            UntrackedSpentFee {
+                fee: prev_untracked_spent_fee,
+                updated_at: mock_env().block.time,
+            }
+        );
     }
 
     #[test]
@@ -249,7 +289,14 @@ mod tests {
         let prev_untracked_spent_fee = vec![Coin::new(500, "uosmo")];
 
         UNTRACKED_SPENT_FEES
-            .save(deps.as_mut().storage, key, &prev_untracked_spent_fee)
+            .save(
+                deps.as_mut().storage,
+                key,
+                &UntrackedSpentFee {
+                    fee: prev_untracked_spent_fee.clone(),
+                    updated_at: mock_env().block.time,
+                },
+            )
             .unwrap();
 
         let fee = vec![Coin::new(1000, "uosmo"), Coin::new(1000, "usdc")];
@@ -288,6 +335,12 @@ mod tests {
             .load(deps.as_ref().storage, key)
             .unwrap_or_default();
 
-        assert_eq!(untracked_spent_fee, prev_untracked_spent_fee);
+        assert_eq!(
+            untracked_spent_fee,
+            UntrackedSpentFee {
+                fee: prev_untracked_spent_fee,
+                updated_at: mock_env().block.time,
+            }
+        );
     }
 }

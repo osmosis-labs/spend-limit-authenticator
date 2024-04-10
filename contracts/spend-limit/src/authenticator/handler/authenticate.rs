@@ -39,7 +39,8 @@ pub fn authenticate(
     let mut spending = SPENDINGS.load(deps.storage, key)?;
     let untracked_spent_fee = UNTRACKED_SPENT_FEES
         .may_load(deps.storage, key)?
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .get_or_reset_accum_fee(&params.reset_period, env.block.time)?;
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
 
     let account_spending_fee = get_account_spending_fee(
@@ -68,6 +69,7 @@ pub fn authenticate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fee::UntrackedSpentFee;
     use crate::period::Period;
     use crate::price::{track_denom, PriceResolutionConfig};
     use crate::spend_limit::{SpendLimitError, Spending};
@@ -310,7 +312,14 @@ mod tests {
 
         if !untracked_spent_fee.is_empty() {
             UNTRACKED_SPENT_FEES
-                .save(&mut deps.storage, key, &untracked_spent_fee)
+                .save(
+                    &mut deps.storage,
+                    key,
+                    &UntrackedSpentFee {
+                        fee: untracked_spent_fee,
+                        updated_at: mock_env().block.time,
+                    },
+                )
                 .unwrap();
         }
 
