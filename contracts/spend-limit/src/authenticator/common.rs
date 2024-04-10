@@ -1,8 +1,9 @@
 use cosmwasm_std::{Addr, Coin, DepsMut, Timestamp, Uint128};
 
 use crate::{
+    period::Period,
     price::{get_and_cache_price, PriceResolutionConfig},
-    spend_limit::{Period, Spending},
+    spend_limit::Spending,
     state::PRICE_INFOS,
     ContractError,
 };

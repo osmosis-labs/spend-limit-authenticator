@@ -1,6 +1,7 @@
-use super::period::PeriodError;
 use cosmwasm_std::{Addr, OverflowError, Uint128};
 use thiserror::Error;
+
+use crate::period::PeriodError;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum SpendLimitError {

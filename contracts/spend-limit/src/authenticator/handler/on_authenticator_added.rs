@@ -34,7 +34,8 @@ pub fn on_authenticator_added(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spend_limit::{Period, SpendLimitParams};
+    use crate::period::Period;
+    use crate::spend_limit::SpendLimitParams;
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Coin, StdError, Uint128,

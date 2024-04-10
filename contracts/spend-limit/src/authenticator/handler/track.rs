@@ -42,10 +42,8 @@ pub fn track(
 mod tests {
     use super::*;
 
-    use crate::{
-        spend_limit::{Period, SpendLimitParams},
-        state::UNTRACKED_SPENT_FEES,
-    };
+    use crate::period::Period;
+    use crate::{spend_limit::SpendLimitParams, state::UNTRACKED_SPENT_FEES};
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Uint128,

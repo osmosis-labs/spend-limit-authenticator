@@ -1,12 +1,12 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure, Coin, Coins, Fraction, Timestamp, Uint128};
 
-use crate::spend_limit::error::SpendLimitError;
-
-use super::{
-    error::SpendLimitResult,
+use crate::{
     period::{to_offset_datetime, Period},
+    spend_limit::error::SpendLimitError,
 };
+
+use super::error::SpendLimitResult;
 
 /// State for tracking spend limit.
 #[cw_serde]

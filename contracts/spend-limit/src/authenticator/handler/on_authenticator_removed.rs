@@ -25,7 +25,8 @@ mod tests {
         to_json_binary, Addr,
     };
 
-    use crate::spend_limit::{Period, SpendLimitParams, Spending};
+    use crate::period::Period;
+    use crate::spend_limit::{SpendLimitParams, Spending};
 
     use super::*;
 

@@ -133,9 +133,10 @@ mod tests {
     };
     use osmosis_std::types::cosmos::bank::v1beta1::MsgSend;
 
+    use crate::period::Period;
     use crate::{
         price::PriceResolutionConfig,
-        spend_limit::{Period, SpendLimitParams, Spending},
+        spend_limit::{SpendLimitParams, Spending},
     };
 
     use super::*;

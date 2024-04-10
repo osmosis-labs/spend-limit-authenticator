@@ -19,8 +19,9 @@ use time::{Duration, OffsetDateTime};
 use crate::{
     assert_substring,
     msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, TrackedDenom},
+    period::Period,
     price::{PriceError, PriceResolutionConfig},
-    spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending, TimeLimit},
+    spend_limit::{SpendLimitError, SpendLimitParams, Spending, TimeLimit},
     test_helper::authenticator_setup::{
         add_1ct_session_authenticator, add_all_of_sig_ver_spend_limit_authenticator,
         add_spend_limit_authenticator, spend_limit_instantiate, spend_limit_store_code,

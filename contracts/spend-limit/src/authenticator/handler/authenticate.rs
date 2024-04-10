@@ -68,9 +68,10 @@ pub fn authenticate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::period::Period;
     use crate::price::{track_denom, PriceResolutionConfig};
-    use crate::spend_limit::{Period, SpendLimitParams, TimeLimit};
     use crate::spend_limit::{SpendLimitError, Spending};
+    use crate::spend_limit::{SpendLimitParams, TimeLimit};
     use crate::test_helper::mock_stargate_querier::{
         arithmetic_twap_to_now_query_handler, mock_dependencies_with_stargate_querier,
     };

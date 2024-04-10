@@ -66,9 +66,10 @@ pub fn confirm_execution(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::period::Period;
     use crate::{
         price::PriceResolutionConfig,
-        spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
+        spend_limit::{SpendLimitError, SpendLimitParams, Spending},
         state::UNTRACKED_SPENT_FEES,
     };
     use cosmwasm_std::{
