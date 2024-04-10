@@ -50,7 +50,7 @@ pub fn confirm_execution(
             continue;
         };
 
-        spending.spend(
+        spending.try_spend(
             coin.amount,
             price_info.price,
             params.limit,
@@ -64,6 +64,9 @@ pub fn confirm_execution(
 
     // clean up the pre_exec balance
     PRE_EXEC_BALANCES.remove(deps.storage, spend_limit_key);
+
+    // TODO: clean up untracked fee, since the transaction is successful
+    // fee has already been captured as part of the balance difference
 
     Ok(Response::new()
         .add_attribute("action", "confirm_execution")
@@ -138,6 +141,8 @@ mod tests {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("account"),
             fee_payer: Addr::unchecked("account"),
+            fee_granter: None,
+            fee: vec![],
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(limit),

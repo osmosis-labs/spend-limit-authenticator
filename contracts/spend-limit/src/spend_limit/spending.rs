@@ -29,7 +29,7 @@ impl Spending {
         }
     }
 
-    pub fn spend(
+    pub fn try_spend(
         &mut self,
         amount: Uint128,
         price: impl Fraction<Uint128>,
@@ -123,7 +123,7 @@ mod tests {
         let conversion_rate = Decimal::one();
 
         spending
-            .spend(
+            .try_spend(
                 Uint128::from(50_000_000u128),
                 conversion_rate,
                 limit,
@@ -142,7 +142,7 @@ mod tests {
         let at = to_timestamp(datetime!(2024-01-01 23:59:59 UTC));
         let err = spending
             .clone()
-            .spend(
+            .try_spend(
                 Uint128::from(50_000_001u128),
                 conversion_rate,
                 limit,
@@ -162,7 +162,7 @@ mod tests {
         // try spending a all the limit
         let at = to_timestamp(datetime!(2024-01-01 23:59:59 UTC));
         let spending = spending
-            .spend(
+            .try_spend(
                 Uint128::from(50_000_000u128),
                 conversion_rate,
                 limit,
@@ -180,7 +180,7 @@ mod tests {
         // reset if new period
         let at = to_timestamp(datetime!(2024-01-02 00:00:00 UTC));
         let spending = spending
-            .spend(Uint128::zero(), conversion_rate, limit, &period, at)
+            .try_spend(Uint128::zero(), conversion_rate, limit, &period, at)
             .unwrap();
 
         assert_eq!(spending.value_spent_in_period, Uint128::zero());
@@ -198,7 +198,7 @@ mod tests {
         let at = to_timestamp(datetime!(2024-01-01 00:00:00 UTC));
 
         spending
-            .spend(
+            .try_spend(
                 Uint128::from(50_000_000u128 * 200_000u128),
                 conversion_rate,
                 limit,

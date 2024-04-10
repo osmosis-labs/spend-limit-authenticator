@@ -15,6 +15,15 @@ pub fn track(
         ..
     }: TrackRequest,
 ) -> AuthenticatorResult<Response> {
+    // TODO:
+    // - does as instructed if fee_granter.is_none() and fee_payer == account
+    // - load `let spending = SPENDINGS.load(deps.storage, spend_limit_key)?;`
+    // - load `let untracked_fee = UNTRACKED_FEES.may_load(deps.storage, spend_limit_key)?;`
+    // - accumulate untracked_fee += fee, if confirm passed, it will be cleaned up, (mark as tracked in a sense)
+    // - reset if period is passed
+    //
+    // accumulation needs to happen here because track happens in ante which state will be committed even tx failed
+
     update_pre_exec_balance(deps, &account, authenticator_id.as_str())?;
     Ok(Response::new().add_attribute("action", "track"))
 }
@@ -27,10 +36,8 @@ fn update_pre_exec_balance(
     // query all the balances of the account
     let balances = deps.querier.query_all_balances(account)?;
 
-    // make sure the pre-exec balance is cleaned up
+    // save the updated pre_exec balance without worrying about the dirty state
     let key = (account, authenticator_id);
-
-    // save the updated pre_exec balance
     PRE_EXEC_BALANCES.save(deps.storage, key, &balances)?;
 
     Ok(())
@@ -55,6 +62,8 @@ mod tests {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             fee_payer: Addr::unchecked("addr"),
+            fee_granter: None,
+            fee: vec![],
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(500_000_000),
@@ -94,6 +103,8 @@ mod tests {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("addr"),
             fee_payer: Addr::unchecked("addr"),
+            fee_granter: None,
+            fee: vec![],
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(500_000_000),
