@@ -1,12 +1,10 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::price::get_and_cache_price;
+use crate::authenticator::common::try_spend_all;
 use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
 
-use crate::state::{
-    PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES,
-};
+use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 
 use super::validate_and_parse_params;
@@ -39,27 +37,15 @@ pub fn confirm_execution(
 
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
 
-    for coin in spent_coins.iter() {
-        // If the coin is not tracked, we don't count it towards the spending limit
-        let Some(price_info) = get_and_cache_price(
-            &PRICE_INFOS,
-            deps.branch(),
-            &conf,
-            env.block.time,
-            &coin.denom,
-        )?
-        else {
-            continue;
-        };
-
-        spending.try_spend(
-            coin.amount,
-            price_info.price,
-            params.limit,
-            &params.reset_period,
-            env.block.time,
-        )?;
-    }
+    try_spend_all(
+        deps.branch(),
+        &mut spending,
+        spent_coins,
+        &conf,
+        params.limit,
+        &params.reset_period,
+        env.block.time,
+    )?;
 
     // save the updated spending
     SPENDINGS.save(deps.storage, spend_limit_key, &spending)?;

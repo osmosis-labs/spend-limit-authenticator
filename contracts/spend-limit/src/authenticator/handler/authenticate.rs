@@ -2,15 +2,15 @@ use cosmwasm_std::{DepsMut, Env, Response, Timestamp};
 use osmosis_authenticators::AuthenticationRequest;
 
 use crate::{
-    price::get_and_cache_price,
-    state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES},
+    authenticator::common::{get_account_spending_fee, try_spend_all},
+    state::{PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES},
     ContractError,
 };
 
 use super::validate_and_parse_params;
 
 pub fn authenticate(
-    mut deps: DepsMut,
+    deps: DepsMut,
     env: Env,
     auth_request: AuthenticationRequest,
 ) -> Result<Response, ContractError> {
@@ -42,44 +42,25 @@ pub fn authenticate(
         .unwrap_or_default();
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
 
-    // prioritize fee_granter over fee_payer if both are present
-    let account_spending_fee = if let Some(fee_granter) = auth_request.fee_granter {
-        if auth_request.account == fee_granter {
-            auth_request.fee
-        } else {
-            vec![]
-        }
-    } else {
-        if auth_request.account == auth_request.fee_payer {
-            auth_request.fee
-        } else {
-            vec![]
-        }
-    };
+    let account_spending_fee = get_account_spending_fee(
+        &auth_request.account,
+        &auth_request.fee_payer,
+        auth_request.fee_granter.as_ref(),
+        auth_request.fee,
+    );
 
     // check whether the fee spent + about to spend is within the limit
     // this will not be committed to the state
-    for fee in vec![account_spending_fee, untracked_spent_fee].concat() {
-        // If the coin is not tracked, we don't count it towards the spending limit
-        let Some(price_info) = get_and_cache_price(
-            &PRICE_INFOS,
-            deps.branch(),
-            &conf,
-            env.block.time,
-            &fee.denom,
-        )?
-        else {
-            continue;
-        };
-
-        spending.try_spend(
-            fee.amount,
-            price_info.price,
-            params.limit,
-            &params.reset_period,
-            env.block.time,
-        )?;
-    }
+    let coins = vec![account_spending_fee, untracked_spent_fee].concat();
+    try_spend_all(
+        deps,
+        &mut spending,
+        coins,
+        &conf,
+        params.limit,
+        &params.reset_period,
+        env.block.time,
+    )?;
 
     Ok(Response::new().add_attribute("action", "authenticate"))
 }
@@ -93,6 +74,8 @@ mod tests {
     use crate::test_helper::mock_stargate_querier::{
         arithmetic_twap_to_now_query_handler, mock_dependencies_with_stargate_querier,
     };
+
+    use crate::state::PRICE_INFOS;
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, ContractResult, Timestamp,
@@ -279,6 +262,7 @@ mod tests {
         #[case] result: Result<(), ContractError>,
     ) {
         // Setup the environment
+
         let mut deps = mock_dependencies_with_stargate_querier(
             &[],
             arithmetic_twap_to_now_query_handler(Box::new(|req| {
