@@ -236,11 +236,6 @@ mod tests {
         vec![Coin::new(500_000_002, "uusdc")],
         Err(SpendLimitError::overspend(500_000_001, 500_000_002).into()))
     ]
-    // TODO:
-    // - if fee payer is not the account, the fee should not be counted towards the limit
-    //    - but untrack_spent_fee should be counted
-    // - if fee granter is not the account, the fee should not be counted towards the limit
-    //    - but untrack_spent_fee should be counted
     #[case::fee_spent_over_the_limit_by_fee_grant("account", Some("granter"),
         vec![Coin::new(1_000_000_001, "uusdc")],
         vec![],

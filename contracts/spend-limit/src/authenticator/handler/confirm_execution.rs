@@ -4,7 +4,9 @@ use osmosis_authenticators::ConfirmExecutionRequest;
 use crate::price::get_and_cache_price;
 use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
 
-use crate::state::{PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
+use crate::state::{
+    PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES,
+};
 use crate::ContractError;
 
 use super::validate_and_parse_params;
@@ -65,8 +67,9 @@ pub fn confirm_execution(
     // clean up the pre_exec balance
     PRE_EXEC_BALANCES.remove(deps.storage, spend_limit_key);
 
-    // TODO: clean up untracked fee, since the transaction is successful
+    // Clean up untracked spent fee, since the transaction is successful
     // fee has already been captured as part of the balance difference
+    UNTRACKED_SPENT_FEES.remove(deps.storage, spend_limit_key);
 
     Ok(Response::new()
         .add_attribute("action", "confirm_execution")
@@ -80,6 +83,7 @@ mod tests {
     use crate::{
         price::PriceResolutionConfig,
         spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
+        state::UNTRACKED_SPENT_FEES,
     };
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
@@ -89,16 +93,17 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case::spend_at_limit(1000, 500, 500, Ok(Response::new()
+    #[case::spend_at_limit(1000, 500, 500, vec![Coin::new(1000_000_000, "uosmo")], Ok(Response::new()
         .add_attribute("action", "confirm_execution")
         .add_attribute("spent", spent.to_string())
         .add_attribute("limit", limit.to_string())
     ))]
-    #[case::spend_over_limit(1000, 500, 501, Err(SpendLimitError::overspend(500, 501).into()))]
+    #[case::spend_over_limit(1000, 500, 501, vec![Coin::new(1000_000_000, "uosmo")], Err(SpendLimitError::overspend(500, 501).into()))]
     fn test_confirm_execution_only_spends_quoted_denom(
         #[case] initial_balance: u128,
         #[case] limit: u128,
         #[case] spent: u128,
+        #[case] untracked_spent_fee: Vec<Coin>,
         #[case] expected: Result<Response, ContractError>,
     ) {
         let fixed_balance = Coin::new(500, "uosmo");
@@ -112,6 +117,10 @@ mod tests {
         )]);
 
         let key = (&Addr::unchecked("account"), "2");
+
+        UNTRACKED_SPENT_FEES
+            .save(&mut deps.storage, key, &untracked_spent_fee)
+            .unwrap();
 
         PRE_EXEC_BALANCES
             .save(
@@ -172,9 +181,23 @@ mod tests {
                         last_spent_at: mock_env().block.time
                     }
                 );
+
+                // verify that the untracked spent fee is cleaned up
+                let untracked_spent_fee = UNTRACKED_SPENT_FEES
+                    .may_load(deps.as_ref().storage, key)
+                    .unwrap();
+                assert_eq!(untracked_spent_fee, None);
             }
             Err(expected_err) => {
                 assert_eq!(res.unwrap_err(), expected_err);
+
+                // verify that untracked spent fee is not cleaned up
+                assert_eq!(
+                    UNTRACKED_SPENT_FEES
+                        .may_load(deps.as_ref().storage, key)
+                        .unwrap(),
+                    Some(untracked_spent_fee)
+                );
             }
         }
     }
