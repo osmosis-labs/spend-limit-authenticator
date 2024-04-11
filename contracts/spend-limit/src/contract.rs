@@ -94,6 +94,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 }
 
 // TODO: check period, if has changed, reset value_spent_in_period to 0
+// TODO: add untracked spent fee
 pub fn query_spending(
     deps: Deps,
     account: Addr,

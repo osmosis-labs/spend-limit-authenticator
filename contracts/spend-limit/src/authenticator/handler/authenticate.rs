@@ -52,7 +52,7 @@ pub fn authenticate(
 
     // check whether the fee spent + about to spend is within the limit
     // this will not be committed to the state
-    let coins = vec![account_spending_fee, untracked_spent_fee].concat();
+    let coins = vec![untracked_spent_fee, account_spending_fee].concat();
     try_spend_all(
         deps,
         &mut spending,
@@ -220,7 +220,7 @@ mod tests {
     #[case::fee_spent_over_the_limit("account", None,
         vec![Coin::new(333_333_333, "uosmo")],
         vec![Coin::new(500_000_002, "uusdc")],
-        Err(SpendLimitError::overspend(500_000_001, 500_000_002).into()))
+        Err(SpendLimitError::overspend(499_999_998, 499_999_999).into()))
     ]
     #[case::fee_spent_over_the_limit_by_fee_grant("account", Some("granter"),
         vec![Coin::new(1_000_000_001, "uusdc")],
