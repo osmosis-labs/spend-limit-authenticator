@@ -1,5 +1,5 @@
 // Ignore integration tests for code coverage since there will be problems with dynamic linking libosmosistesttube
-// and also, tarpaulin will not be able read coverage out of wasm binary anyway
+// and also, tarpaulin will not be able to read coverage out of wasm binary anyway
 #![cfg(all(test, not(tarpaulin)))]
 
 use cosmwasm_std::{Coin, Timestamp, Uint128};
@@ -11,8 +11,8 @@ use osmosis_std::types::osmosis::{
 };
 use osmosis_test_tube::{
     cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx,
-    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, Gamm, Module, OsmosisTestApp,
-    Runner, RunnerExecuteResult, SigningAccount, Wasm,
+    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, FeeSetting, Gamm, Module,
+    OsmosisTestApp, Runner, RunnerExecuteResult, RunnerResult, SigningAccount, Wasm,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -36,14 +36,18 @@ const UATOM: &str = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B2
 fn test_no_conversion() {
     let app = OsmosisTestApp::new();
     set_maximum_unauthenticated_gas(&app, MAXIMUM_UNAUTHENTICATED_GAS);
-    let accs = app
-        .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
+    let acc_1 = app
+        .init_account(&[Coin::new(1_000_000_000_000_000, "uosmo")])
+        .unwrap();
+
+    let acc_2 = app
+        .init_account(&[Coin::new(1_000_000_000_000_000, "uosmo")])
         .unwrap();
 
     let wasm = Wasm::new(&app);
 
     // Store code and initialize spend limit contract
-    let code_id = spend_limit_store_code(&wasm, &accs[0]);
+    let code_id = spend_limit_store_code(&wasm, &acc_1);
     let contract_addr = spend_limit_instantiate(
         &wasm,
         code_id,
@@ -55,45 +59,70 @@ fn test_no_conversion() {
             },
             tracked_denoms: vec![],
         },
-        &accs[0],
+        &acc_1,
     );
+
+    let spend_limit_querier = SpendLimitQuerier::new(&app, contract_addr.to_string());
 
     // Add spend limit authenticator
     let spend_limit_auth_id = add_spend_limit_authenticator(
         &app,
-        &accs[0],
+        &acc_1,
         &contract_addr,
         &SpendLimitParams {
-            limit: Uint128::new(1_000_000),
+            limit: Uint128::new(1_500_000),
             reset_period: Period::Day,
             time_limit: None,
         },
     );
 
+    let acc_1_custom_fee = acc_1.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(500_000, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
     // spend to the limit
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
         vec![Coin::new(1_000_000, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
 
+    let timestamp = Timestamp::from_nanos(app.get_block_time_nanos() as u64);
+
+    assert_eq!(
+        spend_limit_querier
+            .query_spendings_by_account(acc_1_custom_fee.address())
+            .unwrap(),
+        vec![(
+            "1".to_string(),
+            Spending {
+                value_spent_in_period: Uint128::new(1_500_000),
+                last_spent_at: timestamp
+            }
+        )]
+    );
+
     // spend some more
+    let acc_1_custom_fee = acc_1_custom_fee.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(2500, "uosmo"),
+        gas_limit: 1_000_000,
+    });
     let res = bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
         vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     );
-
     assert_substring!(
         res.as_ref().unwrap_err().to_string(),
-        SpendLimitError::overspend(0, 1).to_string()
+        SpendLimitError::overspend(0, 2500).to_string()
     );
 
     let prev_ts = app.get_block_time_seconds() as i64;
@@ -105,37 +134,37 @@ fn test_no_conversion() {
 
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(500_000, "uosmo")],
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1_400_000, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
 
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(499_999, "uosmo")],
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(92_500, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
 
     let err = bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(2, "uosmo")],
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap_err();
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(1, 2).to_string()
+        SpendLimitError::overspend(2500, 2501).to_string()
     );
 }
 
@@ -671,7 +700,11 @@ fn test_1_click_trading() {
     .unwrap_err();
     assert_substring!(err.to_string(), "signature verification failed".to_string());
 
-    one_click_swap_exact_amount_in(
+    let account_owner = acc.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(1_000_000, UUSDC),
+        gas_limit: 1_000_000,
+    });
+    let res = one_click_swap_exact_amount_in(
         &app,
         &account_owner,
         &one_click_trading_session_signer_1,
@@ -685,6 +718,8 @@ fn test_1_click_trading() {
     )
     .unwrap();
 
+    dbg!(res.gas_info);
+
     // query spendings
     let SpendingResponse { spending } = wasm
         .query(
@@ -696,7 +731,7 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), 100);
+    assert_eq!(spending.value_spent_in_period.u128(), 3_750_000 + 100);
 
     // swap ion to atom with overspend
     let err = one_click_swap_exact_amount_in(
@@ -816,7 +851,7 @@ fn test_1_click_trading() {
 
     // assert_eq!(spending.value_spent_in_period.u128(), 0);
 
-    // spend almost all of the quota
+    // spend almost all the quota
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
@@ -936,4 +971,23 @@ fn set_maximum_unauthenticated_gas(app: &OsmosisTestApp, maximum_unauthenticated
         .to_any(),
     )
     .unwrap();
+}
+
+struct SpendLimitQuerier<'a> {
+    app: &'a OsmosisTestApp,
+    contract_addr: String,
+}
+
+impl SpendLimitQuerier<'_> {
+    fn new(app: &OsmosisTestApp, contract_addr: String) -> SpendLimitQuerier {
+        SpendLimitQuerier { app, contract_addr }
+    }
+    fn query_spendings_by_account(&self, account: String) -> RunnerResult<Vec<(String, Spending)>> {
+        let wasm = Wasm::new(self.app);
+        let SpendingsByAccountResponse { spendings } = wasm.query(
+            &self.contract_addr,
+            &QueryMsg::SpendingsByAccount { account },
+        )?;
+        Ok(spendings)
+    }
 }

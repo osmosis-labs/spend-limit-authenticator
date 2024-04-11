@@ -1,9 +1,8 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::authenticator::common::try_spend_all;
+use crate::authenticator::common::{get_account_spending_fee, try_spend_all};
 use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
-
 use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 
@@ -16,6 +15,9 @@ pub fn confirm_execution(
         authenticator_id,
         account,
         authenticator_params,
+        fee_payer,
+        fee_granter,
+        fee,
         ..
     }: ConfirmExecutionRequest,
 ) -> Result<Response, ContractError> {
@@ -31,12 +33,29 @@ pub fn confirm_execution(
 
     let pre_exec_balances = pre_exec_balances.try_into()?;
     let post_exec_balances = post_exec_balances.try_into()?;
-    let spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
+    let mut spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
+
+    // Get recent untracked spent fee, the latest fee is already captured in the balance difference, so we need to subtract it
+    let untracked_spent_fee = UNTRACKED_SPENT_FEES
+        .may_load(deps.storage, spend_limit_key)?
+        .unwrap_or_default()
+        .fee;
+
+    // add the untracked spent fee to the spent coins
+    for coin in untracked_spent_fee {
+        spent_coins.add(coin)?;
+    }
+
+    // subtract the account spending fee from the spent coins
+    let account_spending_fee =
+        get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);
+    for coin in account_spending_fee {
+        spent_coins.sub(coin)?;
+    }
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
 
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
-
     try_spend_all(
         deps.branch(),
         &mut spending,
@@ -65,19 +84,21 @@ pub fn confirm_execution(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::period::Period;
-    use crate::{
-        price::PriceResolutionConfig,
-        spend_limit::{SpendLimitError, SpendLimitParams, Spending},
-        state::UNTRACKED_SPENT_FEES,
-    };
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Response, Uint128,
     };
     use osmosis_authenticators::ConfirmExecutionRequest;
     use rstest::rstest;
+
+    use crate::period::Period;
+    use crate::{
+        price::PriceResolutionConfig,
+        spend_limit::{SpendLimitError, SpendLimitParams, Spending},
+        state::UNTRACKED_SPENT_FEES,
+    };
+
+    use super::*;
 
     #[rstest]
     #[case::spend_at_limit(1000, 500, 500, vec![Coin::new(1000_000_000, "uosmo")], Ok(Response::new()
