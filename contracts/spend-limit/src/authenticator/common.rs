@@ -8,6 +8,7 @@ use crate::{
     ContractError,
 };
 
+// Extract the fee being paid by the account. If the fee is paid via a grant, only count it if the granter is the same account
 pub fn get_account_spending_fee(
     account: &Addr,
     fee_payer: &Addr,
