@@ -34,4 +34,3 @@ impl AuthenticatorError {
         }
     }
 }
-pub type AuthenticatorResult<T> = Result<T, AuthenticatorError>;

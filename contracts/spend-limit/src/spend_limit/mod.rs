@@ -1,12 +1,10 @@
 mod error;
 mod params;
-mod period;
 mod spending;
 use cosmwasm_std::Coin;
 
 pub use error::SpendLimitError;
 pub use params::{SpendLimitParams, TimeLimit};
-pub use period::Period;
 pub use spending::{calculate_spent_coins, Spending};
 
 use cosmwasm_std::Addr;

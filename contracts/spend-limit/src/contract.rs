@@ -94,6 +94,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
 }
 
 // TODO: check period, if has changed, reset value_spent_in_period to 0
+// TODO: add untracked spent fee
 pub fn query_spending(
     deps: Deps,
     account: Addr,
@@ -133,9 +134,10 @@ mod tests {
     };
     use osmosis_std::types::cosmos::bank::v1beta1::MsgSend;
 
+    use crate::period::Period;
     use crate::{
         price::PriceResolutionConfig,
-        spend_limit::{Period, SpendLimitParams, Spending},
+        spend_limit::{SpendLimitParams, Spending},
     };
 
     use super::*;
@@ -202,6 +204,8 @@ mod tests {
                 authenticator_id: "2".to_string(),
                 account: Addr::unchecked("limited_account"),
                 fee_payer: Addr::unchecked("limited_account"),
+                fee_granter: None,
+                fee: vec![],
                 msg: msg.clone(),
                 msg_index: 0,
                 signature: Binary::default(),
@@ -234,6 +238,8 @@ mod tests {
             SudoMsg::Track(TrackRequest {
                 account: Addr::unchecked("limited_account"),
                 fee_payer: Addr::unchecked("limited_account"),
+                fee_granter: None,
+                fee: vec![],
                 authenticator_id: "2".to_string(),
                 msg: msg.clone(),
                 msg_index: 0,
@@ -254,6 +260,8 @@ mod tests {
                 authenticator_id: "2".to_string(),
                 account: Addr::unchecked("limited_account"),
                 fee_payer: Addr::unchecked("limited_account"),
+                fee_granter: None,
+                fee: vec![],
                 msg: msg.clone(),
                 msg_index: 0,
                 authenticator_params: Some(authenticator_params.clone()),

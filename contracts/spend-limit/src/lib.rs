@@ -1,4 +1,6 @@
 pub mod authenticator;
+pub mod fee;
+pub mod period;
 pub mod price;
 pub mod spend_limit;
 

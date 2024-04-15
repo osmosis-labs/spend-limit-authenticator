@@ -97,12 +97,14 @@ fn fetch_twap_price(
                 route.token_out_denom.clone(),
                 Some(proto_start_time.clone()),
             )
-            .map_err(|_| PriceError::twap_query_error(
-                pool_id,
-                base_denom.as_str(),
-                route.token_out_denom.as_str(),
-                start_time,
-            ))?
+            .map_err(|_| {
+                PriceError::twap_query_error(
+                    pool_id,
+                    base_denom.as_str(),
+                    route.token_out_denom.as_str(),
+                    start_time,
+                )
+            })?
             .arithmetic_twap;
 
         price = price.checked_mul(arithmetic_twap.parse()?)?;
@@ -330,26 +332,26 @@ mod tests {
 
     #[rstest]
     #[case::valid_swap_routes_ending_with_quote_denom(
-        UATOM, 
-        UUSDC, 
+        UATOM,
+        UUSDC,
         vec![
             SwapAmountInRoute { pool_id: 1, token_out_denom: "uosmo".to_string() }, 
             SwapAmountInRoute { pool_id: 2, token_out_denom: UUSDC.to_string() }
-        ], 
+        ],
         Ok("9.600000000000000000")
     )]
     #[case::swap_routes_not_ending_with_quote_denom(
         "uosmo", 
-        UUSDC, 
+        UUSDC,
         vec![
             SwapAmountInRoute { pool_id: 1, token_out_denom: UATOM.to_string() }
-        ], 
+        ],
         Err(PriceError::SwapRoutesMustEndWithQuoteDenom { quote_denom: UUSDC.to_string(), swap_routes: swap_routes.clone() })
     )]
     #[case::empty_swap_routes(
         "uosmo", 
-        UUSDC, 
-        vec![], 
+        UUSDC,
+        vec![],
         Err(PriceError::SwapRoutesMustEndWithQuoteDenom { quote_denom: UUSDC.to_string(), swap_routes: swap_routes.clone() })
     )]
     #[case::invalid_arithmetic_twap(
@@ -357,7 +359,7 @@ mod tests {
         "uinvalid", 
         vec![
             SwapAmountInRoute { pool_id: 99, token_out_denom: "uinvalid".to_string() }
-        ], 
+        ],
         Err(PriceError::StdError(cosmwasm_std::StdError::generic_err("Error parsing whole")))
     )]
     #[case::overflow_arithmetic_twap(
@@ -366,7 +368,7 @@ mod tests {
         vec![
             SwapAmountInRoute { pool_id: 991, token_out_denom: "udecmax".to_string() },
             SwapAmountInRoute { pool_id: 992, token_out_denom: "uoverflow".to_string() }
-        ], 
+        ],
         Err(PriceError::PriceCalculationError(
             OverflowError::new(OverflowOperation::Mul, Decimal::MAX, 2)
         ))
@@ -376,7 +378,7 @@ mod tests {
         #[case] base_denom: &str,
         #[case] quote_denom: &str,
         #[case] swap_routes: Vec<SwapAmountInRoute>,
-        #[case] expected: Result<&str, PriceError>
+        #[case] expected: Result<&str, PriceError>,
     ) {
         let conf = PriceResolutionConfig {
             quote_denom: quote_denom.to_string(),
@@ -393,11 +395,21 @@ mod tests {
                 let pool_id = req.pool_id;
 
                 match (pool_id, base_asset, quote_asset) {
-                    (1, UATOM, "uosmo") => ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap: "6.400000000000000000".to_string() }),
-                    (2, "uosmo", UUSDC) => ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap: "1.500000000000000000".to_string() }),
-                    (99, _, _) => ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap: "not_a_decimal".to_string() }),
-                    (991, _, _) => ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap: Decimal::MAX.to_string() }),
-                    (992, _, _) => ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap: "2.000000000000000000".to_string() }),
+                    (1, UATOM, "uosmo") => ContractResult::Ok(ArithmeticTwapToNowResponse {
+                        arithmetic_twap: "6.400000000000000000".to_string(),
+                    }),
+                    (2, "uosmo", UUSDC) => ContractResult::Ok(ArithmeticTwapToNowResponse {
+                        arithmetic_twap: "1.500000000000000000".to_string(),
+                    }),
+                    (99, _, _) => ContractResult::Ok(ArithmeticTwapToNowResponse {
+                        arithmetic_twap: "not_a_decimal".to_string(),
+                    }),
+                    (991, _, _) => ContractResult::Ok(ArithmeticTwapToNowResponse {
+                        arithmetic_twap: Decimal::MAX.to_string(),
+                    }),
+                    (992, _, _) => ContractResult::Ok(ArithmeticTwapToNowResponse {
+                        arithmetic_twap: "2.000000000000000000".to_string(),
+                    }),
                     _ => ContractResult::Err("Price not found".to_string()),
                 }
             })),
@@ -412,12 +424,15 @@ mod tests {
         );
 
         match expected {
-            Ok(expected) => assert_eq!(result.unwrap(), PriceInfo {
-                price: expected.parse::<Decimal>().unwrap(),
-                last_updated_time: block_time,
-                swap_routes
-            }),
-            Err(e) => assert_eq!(result.unwrap_err(), e)
+            Ok(expected) => assert_eq!(
+                result.unwrap(),
+                PriceInfo {
+                    price: expected.parse::<Decimal>().unwrap(),
+                    last_updated_time: block_time,
+                    swap_routes
+                }
+            ),
+            Err(e) => assert_eq!(result.unwrap_err(), e),
         }
     }
 
@@ -429,10 +444,7 @@ mod tests {
     #[case(Timestamp::from_nanos(1509495600_750000002), ProtoTimestamp { seconds: 1509495600, nanos: 750000002 })]
     #[case(Timestamp::from_nanos(1409532000_125000003), ProtoTimestamp { seconds: 1409532000, nanos: 125000003 })]
     #[case(Timestamp::from_nanos(1309568400_875000004), ProtoTimestamp { seconds: 1309568400, nanos: 875000004 })]
-    fn test_to_proto_timestamp(
-        #[case] input: Timestamp,
-        #[case] expected: ProtoTimestamp,
-    ) {
+    fn test_to_proto_timestamp(#[case] input: Timestamp, #[case] expected: ProtoTimestamp) {
         let result = to_proto_timestamp(input);
         assert_eq!(result, expected);
     }

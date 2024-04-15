@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Timestamp, Uint128};
 
-use super::period::Period;
+use crate::period::Period;
 
 #[cw_serde]
 pub struct SpendLimitParams {

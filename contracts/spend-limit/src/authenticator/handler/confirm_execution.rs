@@ -1,10 +1,9 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::price::get_and_cache_price;
+use crate::authenticator::common::{get_account_spending_fee, try_spend_all};
 use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
-
-use crate::state::{PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
+use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 
 use super::validate_and_parse_params;
@@ -16,6 +15,9 @@ pub fn confirm_execution(
         authenticator_id,
         account,
         authenticator_params,
+        fee_payer,
+        fee_granter,
+        fee,
         ..
     }: ConfirmExecutionRequest,
 ) -> Result<Response, ContractError> {
@@ -31,39 +33,51 @@ pub fn confirm_execution(
 
     let pre_exec_balances = pre_exec_balances.try_into()?;
     let post_exec_balances = post_exec_balances.try_into()?;
-    let spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
+    let mut spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
+
+    // Get recent untracked spent fee, the latest fee is already captured in the balance difference, so we need to subtract it
+    let untracked_spent_fee = UNTRACKED_SPENT_FEES
+        .may_load(deps.storage, spend_limit_key)?
+        .unwrap_or_default()
+        .fee;
+
+    // add all untracked spent fees to the spent coins. 
+    // These are fees that have been deducted on previous failed tx, but still 
+    // not counted on the spend limit. We add them here.
+    for coin in untracked_spent_fee {
+        spent_coins.add(coin)?;
+    }
+
+    // To avoid double counting, we subtract the account spending fee from the spent coins. 
+    // This is the fee for the current transaction and thus already captured by the difference in balances.
+    let account_spending_fee =
+        get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);
+    for coin in account_spending_fee {
+        spent_coins.sub(coin)?;
+    }
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
 
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
-
-    for coin in spent_coins.iter() {
-        // If the coin is not tracked, we don't count it towards the spending limit
-        let Some(price_info) = get_and_cache_price(
-            &PRICE_INFOS,
-            deps.branch(),
-            &conf,
-            env.block.time,
-            &coin.denom,
-        )?
-        else {
-            continue;
-        };
-
-        spending.spend(
-            coin.amount,
-            price_info.price,
-            params.limit,
-            &params.reset_period,
-            env.block.time,
-        )?;
-    }
+    try_spend_all(
+        deps.branch(),
+        &mut spending,
+        spent_coins,
+        &conf,
+        params.limit,
+        &params.reset_period,
+        env.block.time,
+    )?;
 
     // save the updated spending
     SPENDINGS.save(deps.storage, spend_limit_key, &spending)?;
 
     // clean up the pre_exec balance
     PRE_EXEC_BALANCES.remove(deps.storage, spend_limit_key);
+
+    // Clean up untracked spent fee, since the transaction is successful
+    // fee has already been captured as part of the balance difference
+    UNTRACKED_SPENT_FEES.remove(deps.storage, spend_limit_key);
 
     Ok(Response::new()
         .add_attribute("action", "confirm_execution")
@@ -73,11 +87,6 @@ pub fn confirm_execution(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
-        price::PriceResolutionConfig,
-        spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending},
-    };
     use cosmwasm_std::{
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Response, Uint128,
@@ -85,19 +94,31 @@ mod tests {
     use osmosis_authenticators::ConfirmExecutionRequest;
     use rstest::rstest;
 
+    use crate::period::Period;
+    use crate::{
+        price::PriceResolutionConfig,
+        spend_limit::{SpendLimitError, SpendLimitParams, Spending},
+        state::UNTRACKED_SPENT_FEES,
+    };
+
+    use super::*;
+
     #[rstest]
-    #[case::spend_at_limit(1000, 500, 500, Ok(Response::new()
+    #[case::spend_at_limit(1000, 500, 500, vec![Coin::new(1000_000_000, "uosmo")], Ok(Response::new()
         .add_attribute("action", "confirm_execution")
         .add_attribute("spent", spent.to_string())
         .add_attribute("limit", limit.to_string())
     ))]
-    #[case::spend_over_limit(1000, 500, 501, Err(SpendLimitError::overspend(500, 501).into()))]
+    #[case::spend_over_limit(1000, 500, 501, vec![Coin::new(1000_000_000, "uosmo")], Err(SpendLimitError::overspend(500, 501).into()))]
     fn test_confirm_execution_only_spends_quoted_denom(
         #[case] initial_balance: u128,
         #[case] limit: u128,
         #[case] spent: u128,
+        #[case] untracked_spent_fee: Vec<Coin>,
         #[case] expected: Result<Response, ContractError>,
     ) {
+        use crate::fee::UntrackedSpentFee;
+
         let fixed_balance = Coin::new(500, "uosmo");
         // Setup the environment
         let mut deps = mock_dependencies_with_balances(&[(
@@ -109,6 +130,17 @@ mod tests {
         )]);
 
         let key = (&Addr::unchecked("account"), "2");
+
+        UNTRACKED_SPENT_FEES
+            .save(
+                &mut deps.storage,
+                key,
+                &UntrackedSpentFee {
+                    fee: untracked_spent_fee.clone(),
+                    updated_at: mock_env().block.time,
+                },
+            )
+            .unwrap();
 
         PRE_EXEC_BALANCES
             .save(
@@ -138,6 +170,8 @@ mod tests {
             authenticator_id: "2".to_string(),
             account: Addr::unchecked("account"),
             fee_payer: Addr::unchecked("account"),
+            fee_granter: None,
+            fee: vec![],
             authenticator_params: Some(
                 to_json_binary(&SpendLimitParams {
                     limit: Uint128::new(limit),
@@ -167,9 +201,26 @@ mod tests {
                         last_spent_at: mock_env().block.time
                     }
                 );
+
+                // verify that the untracked spent fee is cleaned up
+                let untracked_spent_fee = UNTRACKED_SPENT_FEES
+                    .may_load(deps.as_ref().storage, key)
+                    .unwrap();
+                assert_eq!(untracked_spent_fee, None);
             }
             Err(expected_err) => {
                 assert_eq!(res.unwrap_err(), expected_err);
+
+                // verify that untracked spent fee is not cleaned up
+                assert_eq!(
+                    UNTRACKED_SPENT_FEES
+                        .may_load(deps.as_ref().storage, key)
+                        .unwrap(),
+                    Some(UntrackedSpentFee {
+                        fee: untracked_spent_fee,
+                        updated_at: mock_env().block.time,
+                    })
+                );
             }
         }
     }

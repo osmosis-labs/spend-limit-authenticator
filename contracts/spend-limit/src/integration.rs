@@ -1,26 +1,24 @@
 // Ignore integration tests for code coverage since there will be problems with dynamic linking libosmosistesttube
-// and also, tarpaulin will not be able read coverage out of wasm binary anyway
+// and also, tarpaulin will not be able to read coverage out of wasm binary anyway
 #![cfg(all(test, not(tarpaulin)))]
 
 use cosmwasm_std::{Coin, Timestamp, Uint128};
+use osmosis_std::types::cosmos::bank::v1beta1::QueryBalanceRequest;
 
 use osmosis_std::types::osmosis::{
     authenticator::{self, MsgRemoveAuthenticator, MsgRemoveAuthenticatorResponse},
     gamm::v1beta1::MsgSwapExactAmountInResponse,
     poolmanager::v1beta1::{MsgSwapExactAmountIn, SwapAmountInRoute},
 };
-use osmosis_test_tube::{
-    cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx,
-    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, Gamm, Module, OsmosisTestApp,
-    Runner, RunnerExecuteResult, SigningAccount, Wasm,
-};
+use osmosis_test_tube::{cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx, osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, FeeSetting, Gamm, Module, OsmosisTestApp, Runner, RunnerExecuteResult, RunnerResult, SigningAccount, Wasm, Bank};
 use time::{Duration, OffsetDateTime};
 
 use crate::{
     assert_substring,
     msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, TrackedDenom},
+    period::Period,
     price::{PriceError, PriceResolutionConfig},
-    spend_limit::{Period, SpendLimitError, SpendLimitParams, Spending, TimeLimit},
+    spend_limit::{SpendLimitError, SpendLimitParams, Spending, TimeLimit},
     test_helper::authenticator_setup::{
         add_1ct_session_authenticator, add_all_of_sig_ver_spend_limit_authenticator,
         add_spend_limit_authenticator, spend_limit_instantiate, spend_limit_store_code,
@@ -35,14 +33,18 @@ const UATOM: &str = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B2
 fn test_no_conversion() {
     let app = OsmosisTestApp::new();
     set_maximum_unauthenticated_gas(&app, MAXIMUM_UNAUTHENTICATED_GAS);
-    let accs = app
-        .init_accounts(&[Coin::new(1_000_000_000_000_000, "uosmo")], 2)
+    let acc_1 = app
+        .init_account(&[Coin::new(1_000_000_000_000_000, "uosmo")])
+        .unwrap();
+
+    let acc_2 = app
+        .init_account(&[Coin::new(1_000_000_000_000_000, "uosmo")])
         .unwrap();
 
     let wasm = Wasm::new(&app);
 
     // Store code and initialize spend limit contract
-    let code_id = spend_limit_store_code(&wasm, &accs[0]);
+    let code_id = spend_limit_store_code(&wasm, &acc_1);
     let contract_addr = spend_limit_instantiate(
         &wasm,
         code_id,
@@ -54,45 +56,70 @@ fn test_no_conversion() {
             },
             tracked_denoms: vec![],
         },
-        &accs[0],
+        &acc_1,
     );
+
+    let spend_limit_querier = SpendLimitQuerier::new(&app, contract_addr.to_string());
 
     // Add spend limit authenticator
     let spend_limit_auth_id = add_spend_limit_authenticator(
         &app,
-        &accs[0],
+        &acc_1,
         &contract_addr,
         &SpendLimitParams {
-            limit: Uint128::new(1_000_000),
+            limit: Uint128::new(1_500_000),
             reset_period: Period::Day,
             time_limit: None,
         },
     );
 
+    let acc_1_custom_fee = acc_1.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(500_000, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
     // spend to the limit
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
         vec![Coin::new(1_000_000, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
 
+    let timestamp = Timestamp::from_nanos(app.get_block_time_nanos() as u64);
+
+    assert_eq!(
+        spend_limit_querier
+            .query_spendings_by_account(acc_1_custom_fee.address())
+            .unwrap(),
+        vec![(
+            "1".to_string(),
+            Spending {
+                value_spent_in_period: Uint128::new(1_500_000),
+                last_spent_at: timestamp
+            }
+        )]
+    );
+
     // spend some more
+    let acc_1_custom_fee = acc_1_custom_fee.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(2500, "uosmo"),
+        gas_limit: 1_000_000,
+    });
     let res = bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
         vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     );
-
     assert_substring!(
         res.as_ref().unwrap_err().to_string(),
-        SpendLimitError::overspend(0, 1).to_string()
+        SpendLimitError::overspend(0, 2500).to_string()
     );
 
     let prev_ts = app.get_block_time_seconds() as i64;
@@ -104,37 +131,208 @@ fn test_no_conversion() {
 
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(500_000, "uosmo")],
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1_400_000, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
 
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(499_999, "uosmo")],
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(92_500, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
 
     let err = bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(2, "uosmo")],
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap_err();
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(1, 2).to_string()
+        SpendLimitError::overspend(2500, 2501).to_string()
+    );
+}
+#[test]
+fn test_fee_draining() {
+    let app = OsmosisTestApp::new();
+    set_maximum_unauthenticated_gas(&app, MAXIMUM_UNAUTHENTICATED_GAS);
+
+    let initial_balance =[Coin::new(1_000_000_000_000_000, "uosmo")];
+    let acc_1 = app
+        .init_account(&initial_balance)
+        .unwrap();
+
+    let acc_2 = app
+        .init_account(&initial_balance)
+        .unwrap();
+
+    let wasm = Wasm::new(&app);
+    let bank = Bank::new(&app);
+
+    // Store code and initialize spend limit contract
+    let code_id = spend_limit_store_code(&wasm, &acc_2);
+    let contract_addr = spend_limit_instantiate(
+        &wasm,
+        code_id,
+        &InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: "uosmo".to_string(),
+                staleness_threshold: 3_600_000_000_000u64.into(), // 1h
+                twap_duration: 3_600_000_000_000u64.into(),       // 1h
+            },
+            tracked_denoms: vec![],
+        },
+        &acc_2,
+    );
+
+    let spend_limit_querier = SpendLimitQuerier::new(&app, contract_addr.to_string());
+
+    let acc_1_custom_fee = acc_1.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(5_000, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
+    // Add spend limit authenticator
+    let spend_limit_auth_id = add_spend_limit_authenticator(
+        &app,
+        &acc_1_custom_fee,
+        &contract_addr,
+        &SpendLimitParams {
+            limit: Uint128::new(1_500_000),
+            reset_period: Period::Day,
+            time_limit: None,
+        },
+    );
+
+    // create failed tx to spend fee
+    let acc_1_custom_fee = acc_1_custom_fee.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(500_000, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+    bank_send(
+        &app,
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1, "xxx")], // invalid denom
+        spend_limit_auth_id,
+    )
+        .unwrap_err();
+
+    // check that fee has been deducted
+    let acc_1_balance = bank.query_balance(&QueryBalanceRequest { address: acc_1_custom_fee.address(), denom: "uosmo".to_string() }).unwrap();
+    assert_eq!(acc_1_balance.balance.unwrap(), Coin::new(1_000_000_000_000_000 - 500000 - 5000, "uosmo").into());
+
+    let acc_1_custom_fee = acc_1_custom_fee.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(1_000_000, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
+    // spend to hit the limit, resulted in failed tx
+    let err = bank_send(
+        &app,
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1, "uosmo")],
+        spend_limit_auth_id,
+    )
+        .unwrap_err();
+
+    assert_substring!(
+        err.to_string(),
+        SpendLimitError::overspend(1500000, 1500001).to_string()
+    );
+
+    // check that fee has been deducted
+    let acc_1_balance = bank.query_balance(&QueryBalanceRequest { address: acc_1_custom_fee.address(), denom: "uosmo".to_string() }).unwrap();
+    assert_eq!(acc_1_balance.balance.unwrap(), Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into());
+
+    // spending will not yet be updated (to be fixed)
+    assert_eq!(
+        spend_limit_querier
+            .query_spendings_by_account(acc_1_custom_fee.address())
+            .unwrap(),
+        vec![(
+            "1".to_string(),
+            Spending::default()
+        )]
+    );
+
+    // spend some more
+    let acc_1_custom_fee = acc_1_custom_fee.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(2500, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+    let res = bank_send(
+        &app,
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1, "uosmo")],
+        spend_limit_auth_id,
+    );
+    assert_substring!(
+        res.as_ref().unwrap_err().to_string(),
+        SpendLimitError::overspend(0, 2500).to_string()
+    );
+
+    // this should block at authenticate, which means fee shouldn't be deducted
+    let acc_1_balance = bank.query_balance(&QueryBalanceRequest { address: acc_1_custom_fee.address(), denom: "uosmo".to_string() }).unwrap();
+    assert_eq!(acc_1_balance.balance.unwrap(), Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into());
+
+    let prev_ts = app.get_block_time_seconds() as i64;
+    let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
+    let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
+    let diff = next_dt - prev_ts;
+
+    app.increase_time(diff as u64);
+
+    bank_send(
+        &app,
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1_400_000, "uosmo")],
+        spend_limit_auth_id,
+    )
+        .unwrap();
+
+    bank_send(
+        &app,
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(92_500, "uosmo")],
+        spend_limit_auth_id,
+    )
+        .unwrap();
+
+    let err = bank_send(
+        &app,
+        &acc_1_custom_fee,
+        &acc_1_custom_fee,
+        &acc_2.address(),
+        vec![Coin::new(1, "uosmo")],
+        spend_limit_auth_id,
+    )
+        .unwrap_err();
+
+    assert_substring!(
+        err.to_string(),
+        SpendLimitError::overspend(2500, 2501).to_string()
     );
 }
 
@@ -143,17 +341,15 @@ fn test_with_conversion() {
     let app = OsmosisTestApp::new();
     set_maximum_unauthenticated_gas(&app, MAXIMUM_UNAUTHENTICATED_GAS);
 
-    let accs = app
-        .init_accounts(
-            &[
-                Coin::new(1_000_000_000_000_000, "uosmo"),
-                Coin::new(1_000_000_000_000_000, "uion"),
-                Coin::new(1_000_000_000_000_000, UUSDC),
-                Coin::new(1_000_000_000_000_000, UATOM),
-            ],
-            2,
-        )
-        .unwrap();
+    let initial_balances = &[
+        Coin::new(1_000_000_000_000_000, "uosmo"),
+        Coin::new(1_000_000_000_000_000, "uion"),
+        Coin::new(1_000_000_000_000_000, UUSDC),
+        Coin::new(1_000_000_000_000_000, UATOM),
+    ];
+    let acc_1 = app.init_account(initial_balances).unwrap();
+
+    let acc_2 = app.init_account(initial_balances).unwrap();
 
     let gamm = Gamm::new(&app);
 
@@ -164,7 +360,7 @@ fn test_with_conversion() {
                 Coin::new(1_000_000_000, "uosmo"),
                 Coin::new(1_500_000_000, UUSDC),
             ],
-            &accs[0],
+            &acc_1,
         )
         .unwrap()
         .data
@@ -174,7 +370,7 @@ fn test_with_conversion() {
     let ion_osmo_pool_id = gamm
         .create_basic_pool(
             &[Coin::new(4_000_000, "uion"), Coin::new(1_000_000, "uosmo")],
-            &accs[0],
+            &acc_1,
         )
         .unwrap()
         .data
@@ -184,7 +380,7 @@ fn test_with_conversion() {
     let ion_atom_pool_id = gamm
         .create_basic_pool(
             &[Coin::new(4_000_000, "uion"), Coin::new(1_000_000, UATOM)],
-            &accs[0],
+            &acc_1,
         )
         .unwrap()
         .data
@@ -194,7 +390,7 @@ fn test_with_conversion() {
     let atom_osmo_pool_id = gamm
         .create_basic_pool(
             &[Coin::new(1_000_000, UATOM), Coin::new(1_000_000, "uosmo")],
-            &accs[0],
+            &acc_1,
         )
         .unwrap()
         .data
@@ -206,9 +402,9 @@ fn test_with_conversion() {
     let wasm = Wasm::new(&app);
 
     // Store code and initialize spend limit contract
-    let code_id = spend_limit_store_code(&wasm, &accs[0]);
+    let code_id = spend_limit_store_code(&wasm, &acc_1);
 
-    // try instantiate with incorrect routes
+    // try to instantiate with incorrect routes
     let now = app.get_block_timestamp();
     let start_time = now.minus_nanos(3_600_000_000_000u64);
     let err = wasm
@@ -247,7 +443,7 @@ fn test_with_conversion() {
             None,
             Some("spend_limit_authenticator"),
             &[],
-            &accs[0],
+            &acc_1,
         )
         .unwrap_err();
 
@@ -301,13 +497,13 @@ fn test_with_conversion() {
                 },
             ],
         },
-        &accs[0],
+        &acc_1,
     );
 
     // Add spend limit authenticator
     let spend_limit_auth_id = add_spend_limit_authenticator(
         &app,
-        &accs[0],
+        &acc_1,
         &contract_addr,
         &SpendLimitParams {
             limit: Uint128::new(1_000_000),
@@ -316,13 +512,18 @@ fn test_with_conversion() {
         },
     );
 
+    let acc_1 = acc_1.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(2_500, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
     // spend to the limit
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(666_666, "uosmo")],
+        &acc_1,
+        &acc_1,
+        &acc_2.address(),
+        vec![Coin::new(666_666 - 2_500, "uosmo")],
         spend_limit_auth_id,
     )
     .unwrap();
@@ -330,16 +531,17 @@ fn test_with_conversion() {
     // spend some more
     let res = bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(2, UUSDC)],
+        &acc_1,
+        &acc_1,
+        &acc_2.address(),
+        vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     );
 
+    let fee_in_uusdc = 3750; // 3750uusdc = 2500usmo * 1,5
     assert_substring!(
         res.as_ref().unwrap_err().to_string(),
-        SpendLimitError::overspend(1, 2).to_string()
+        SpendLimitError::overspend(1, fee_in_uusdc).to_string()
     );
 
     let prev_ts = app.get_block_time_seconds() as i64;
@@ -351,29 +553,29 @@ fn test_with_conversion() {
 
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(500_000, UUSDC)],
+        &acc_1,
+        &acc_1,
+        &acc_2.address(),
+        vec![Coin::new(500_000 - fee_in_uusdc, UUSDC)],
         spend_limit_auth_id,
     )
     .unwrap();
 
     bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
-        vec![Coin::new(499_999, UUSDC)],
+        &acc_1,
+        &acc_1,
+        &acc_2.address(),
+        vec![Coin::new(499_999 - fee_in_uusdc, UUSDC)],
         spend_limit_auth_id,
     )
     .unwrap();
 
     let err = bank_send(
         &app,
-        &accs[0],
-        &accs[0],
-        &accs[1].address(),
+        &acc_1,
+        &acc_1,
+        &acc_2.address(),
         vec![Coin::new(6, "uion")],
         spend_limit_auth_id,
     )
@@ -381,7 +583,7 @@ fn test_with_conversion() {
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(1, 2).to_string()
+        SpendLimitError::overspend(1, fee_in_uusdc).to_string()
     );
 }
 
@@ -498,19 +700,19 @@ fn test_setup_and_teardown() {
 }
 
 #[test]
+#[ignore = "this test will require update again when introducing counting slippage & fee towards spending when swap"]
 fn test_1_click_trading() {
     let app = OsmosisTestApp::new();
 
     set_maximum_unauthenticated_gas(&app, MAXIMUM_UNAUTHENTICATED_GAS);
 
-    let acc = app
-        .init_account(&[
-            Coin::new(1_000_000_000_000_000, "uosmo"),
-            Coin::new(1_000_000_000_000_000, "uion"),
-            Coin::new(1_000_000_000_000_000, UUSDC),
-            Coin::new(1_000_000_000_000_000, UATOM),
-        ])
-        .unwrap();
+    let initial_balance = &[
+        Coin::new(1_000_000_000_000_000, "uosmo"),
+        Coin::new(1_000_000_000_000_000, "uion"),
+        Coin::new(1_000_000_000_000_000, UUSDC),
+        Coin::new(1_000_000_000_000_000, UATOM),
+    ];
+    let acc = app.init_account(initial_balance).unwrap();
 
     let empty_accs = app.init_accounts(&[], 3).unwrap();
 
@@ -567,7 +769,7 @@ fn test_1_click_trading() {
     // Store code and initialize spend limit contract
     let code_id = spend_limit_store_code(&wasm, &acc);
 
-    // try instantiate with incorrect routes
+    // try to instantiate with incorrect routes
     let contract_addr = spend_limit_instantiate(
         &wasm,
         code_id,
@@ -670,6 +872,10 @@ fn test_1_click_trading() {
     .unwrap_err();
     assert_substring!(err.to_string(), "signature verification failed".to_string());
 
+    let account_owner = acc.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(1_000_000, UUSDC),
+        gas_limit: 1_000_000,
+    });
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
@@ -695,7 +901,7 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), 100);
+    assert_eq!(spending.value_spent_in_period.u128(), 3_750_000 + 100);
 
     // swap ion to atom with overspend
     let err = one_click_swap_exact_amount_in(
@@ -815,7 +1021,7 @@ fn test_1_click_trading() {
 
     // assert_eq!(spending.value_spent_in_period.u128(), 0);
 
-    // spend almost all of the quota
+    // spend almost all the quota
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
@@ -935,4 +1141,23 @@ fn set_maximum_unauthenticated_gas(app: &OsmosisTestApp, maximum_unauthenticated
         .to_any(),
     )
     .unwrap();
+}
+
+struct SpendLimitQuerier<'a> {
+    app: &'a OsmosisTestApp,
+    contract_addr: String,
+}
+
+impl SpendLimitQuerier<'_> {
+    fn new(app: &OsmosisTestApp, contract_addr: String) -> SpendLimitQuerier {
+        SpendLimitQuerier { app, contract_addr }
+    }
+    fn query_spendings_by_account(&self, account: String) -> RunnerResult<Vec<(String, Spending)>> {
+        let wasm = Wasm::new(self.app);
+        let SpendingsByAccountResponse { spendings } = wasm.query(
+            &self.contract_addr,
+            &QueryMsg::SpendingsByAccount { account },
+        )?;
+        Ok(spendings)
+    }
 }

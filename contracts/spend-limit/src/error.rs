@@ -2,7 +2,10 @@ use thiserror::Error;
 
 use cosmwasm_std::{CoinsError, StdError, Timestamp};
 
-use crate::{authenticator::AuthenticatorError, price::PriceError, spend_limit::SpendLimitError};
+use crate::{
+    authenticator::AuthenticatorError, period::PeriodError, price::PriceError,
+    spend_limit::SpendLimitError,
+};
 
 /// Never is a placeholder to ensure we don't return any errors
 #[derive(Error, Debug)]
@@ -37,4 +40,7 @@ pub enum ContractError {
 
     #[error("Price error: {0}")]
     PriceResolutionError(#[from] PriceError),
+
+    #[error("Period error: {0}")]
+    PeriodError(#[from] PeriodError),
 }
