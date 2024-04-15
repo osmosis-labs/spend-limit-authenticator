@@ -48,7 +48,8 @@ pub fn confirm_execution(
         spent_coins.add(coin)?;
     }
 
-    // subtract the account spending fee from the spent coins
+    // To avoid double counting, we subtract the account spending fee from the spent coins. 
+    // This is the fee for the current transaction and thus already captured by the difference in balances.
     let account_spending_fee =
         get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);
     for coin in account_spending_fee {
