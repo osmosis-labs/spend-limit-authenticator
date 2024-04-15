@@ -41,7 +41,9 @@ pub fn confirm_execution(
         .unwrap_or_default()
         .fee;
 
-    // add the untracked spent fee to the spent coins
+    // add all untracked spent fees to the spent coins. 
+    // These are fees that have been deducted on previous failed tx, but still 
+    // not counted on the spend limit. We add them here.
     for coin in untracked_spent_fee {
         spent_coins.add(coin)?;
     }
