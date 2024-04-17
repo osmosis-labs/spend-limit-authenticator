@@ -8,25 +8,21 @@ use crate::{
     ContractError,
 };
 
-// Extract the fee being paid by the account. If the fee is paid via a grant, only count it if the granter is the same account
+/// Get the spending fee for an account. If the account is not the fee payer, it does not count towards the spending limit.
 pub fn get_account_spending_fee(
     account: &Addr,
     fee_payer: &Addr,
     fee_granter: Option<&Addr>,
     fee: Vec<Coin>,
 ) -> Vec<Coin> {
-    if let Some(fee_granter) = fee_granter {
-        if account == fee_granter {
-            fee
-        } else {
-            vec![]
-        }
+    // fee granter pay for the fee if specified
+    let fee_payer = fee_granter.unwrap_or(fee_payer);
+
+    // count fee paid towards this account only if the account is the fee payer
+    if account == fee_payer {
+        fee
     } else {
-        if account == fee_payer {
-            fee
-        } else {
-            vec![]
-        }
+        vec![]
     }
 }
 
