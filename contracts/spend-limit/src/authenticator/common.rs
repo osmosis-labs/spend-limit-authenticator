@@ -44,10 +44,10 @@ pub fn try_spend_all(
             continue;
         };
 
-        spending
-            .unchecked_spend(coin.amount, price_info.price, reset_period, time)?
-            .ensure_within_limit(limit)?;
+        spending.unchecked_spend(coin.amount, price_info.price, reset_period, time)?;
     }
+
+    spending.ensure_within_limit(limit)?;
 
     Ok(())
 }

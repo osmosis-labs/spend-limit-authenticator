@@ -52,9 +52,11 @@ pub fn confirm_execution(
     // This is the fee for the current transaction and thus already captured by the difference in balances.
     let account_spending_fee =
         get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);
-    for coin in account_spending_fee {
-        spent_coins.sub(coin)?;
+    for fee in account_spending_fee {
+        spent_coins.sub(fee)?;
     }
+
+    // TODO: calculate received coins
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
 
