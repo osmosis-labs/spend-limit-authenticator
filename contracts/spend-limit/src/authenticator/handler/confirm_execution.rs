@@ -41,14 +41,14 @@ pub fn confirm_execution(
         .unwrap_or_default()
         .fee;
 
-    // add all untracked spent fees to the spent coins. 
-    // These are fees that have been deducted on previous failed tx, but still 
+    // add all untracked spent fees to the spent coins.
+    // These are fees that have been deducted on previous failed tx, but still
     // not counted on the spend limit. We add them here.
-    for coin in untracked_spent_fee {
-        spent_coins.add(coin)?;
+    for fee in untracked_spent_fee {
+        spent_coins.add(fee)?;
     }
 
-    // To avoid double counting, we subtract the account spending fee from the spent coins. 
+    // To avoid double counting, we subtract the account spending fee from the spent coins.
     // This is the fee for the current transaction and thus already captured by the difference in balances.
     let account_spending_fee =
         get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);

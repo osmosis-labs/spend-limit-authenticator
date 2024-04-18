@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{ensure, Coin, Coins, Fraction, Timestamp, Uint128};
+use cosmwasm_std::{Coin, Coins, Fraction, Timestamp, Uint128};
 
 use crate::{
     period::{to_offset_datetime, Period},
@@ -29,11 +29,10 @@ impl Spending {
         }
     }
 
-    pub fn try_spend(
+    pub fn unchecked_spend(
         &mut self,
         amount: Uint128,
         price: impl Fraction<Uint128>,
-        limit: Uint128,
         period: &Period,
         at: Timestamp,
     ) -> SpendLimitResult<&mut Self> {
@@ -43,19 +42,22 @@ impl Spending {
         let value_spent_in_period = self.get_or_reset_value_spent(period, at)?;
         let updated_value_spent_in_period = value_spent_in_period.checked_add(spending_value)?;
 
-        // ensure that the value spent in the period is not over the limit
-        ensure!(
-            updated_value_spent_in_period <= limit,
-            SpendLimitError::Overspend {
-                remaining: limit.saturating_sub(value_spent_in_period),
-                requested: spending_value,
-            }
-        );
-
         self.value_spent_in_period = updated_value_spent_in_period;
         self.last_spent_at = at;
 
         Ok(self)
+    }
+
+    /// ensure that the value spent in the period is not over the limit
+    pub fn ensure_within_limit(&self, limit: Uint128) -> SpendLimitResult<()> {
+        if self.value_spent_in_period > limit {
+            Err(SpendLimitError::Overspend {
+                limit,
+                spent: self.value_spent_in_period,
+            })
+        } else {
+            Ok(())
+        }
     }
 
     /// Get the value spent in the period.
@@ -99,6 +101,8 @@ pub fn calculate_spent_coins(
     Ok(spent_coins)
 }
 
+// TODO: calculate received coins
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,13 +127,9 @@ mod tests {
         let conversion_rate = Decimal::one();
 
         spending
-            .try_spend(
-                Uint128::from(50_000_000u128),
-                conversion_rate,
-                limit,
-                &period,
-                at,
-            )
+            .unchecked_spend(Uint128::from(50_000_000u128), conversion_rate, &period, at)
+            .unwrap()
+            .ensure_within_limit(limit)
             .unwrap();
 
         assert_eq!(
@@ -142,34 +142,26 @@ mod tests {
         let at = to_timestamp(datetime!(2024-01-01 23:59:59 UTC));
         let err = spending
             .clone()
-            .try_spend(
-                Uint128::from(50_000_001u128),
-                conversion_rate,
-                limit,
-                &period,
-                at,
-            )
+            .unchecked_spend(Uint128::from(50_000_001u128), conversion_rate, &period, at)
+            .unwrap()
+            .ensure_within_limit(limit)
             .unwrap_err();
 
         assert_eq!(
             err,
             SpendLimitError::Overspend {
-                remaining: Uint128::from(50_000_000u128),
-                requested: Uint128::from(50_000_001u128),
+                limit: Uint128::from(100_000_000u128),
+                spent: Uint128::from(100_000_001u128),
             }
         );
 
         // try spending a all the limit
         let at = to_timestamp(datetime!(2024-01-01 23:59:59 UTC));
         let spending = spending
-            .try_spend(
-                Uint128::from(50_000_000u128),
-                conversion_rate,
-                limit,
-                &period,
-                at,
-            )
+            .unchecked_spend(Uint128::from(50_000_000u128), conversion_rate, &period, at)
             .unwrap();
+
+        spending.ensure_within_limit(limit).unwrap();
 
         assert_eq!(
             spending.value_spent_in_period,
@@ -180,8 +172,10 @@ mod tests {
         // reset if new period
         let at = to_timestamp(datetime!(2024-01-02 00:00:00 UTC));
         let spending = spending
-            .try_spend(Uint128::zero(), conversion_rate, limit, &period, at)
+            .unchecked_spend(Uint128::zero(), conversion_rate, &period, at)
             .unwrap();
+
+        spending.ensure_within_limit(limit).unwrap();
 
         assert_eq!(spending.value_spent_in_period, Uint128::zero());
         assert_eq!(spending.last_spent_at, at);
@@ -198,13 +192,14 @@ mod tests {
         let at = to_timestamp(datetime!(2024-01-01 00:00:00 UTC));
 
         spending
-            .try_spend(
+            .unchecked_spend(
                 Uint128::from(50_000_000u128 * 200_000u128),
                 conversion_rate,
-                limit,
                 &period,
                 at,
             )
+            .unwrap()
+            .ensure_within_limit(limit)
             .unwrap();
 
         assert_eq!(

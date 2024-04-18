@@ -26,6 +26,7 @@ pub fn get_account_spending_fee(
     }
 }
 
+// TODO: calculate diff properly,
 pub fn try_spend_all(
     mut deps: DepsMut,
     spending: &mut Spending,
@@ -43,13 +44,9 @@ pub fn try_spend_all(
             continue;
         };
 
-        spending.try_spend(
-            coin.amount,
-            price_info.price,
-            limit.into(),
-            reset_period,
-            time,
-        )?;
+        spending
+            .unchecked_spend(coin.amount, price_info.price, reset_period, time)?
+            .ensure_within_limit(limit)?;
     }
 
     Ok(())

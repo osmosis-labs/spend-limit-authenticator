@@ -10,7 +10,11 @@ use osmosis_std::types::osmosis::{
     gamm::v1beta1::MsgSwapExactAmountInResponse,
     poolmanager::v1beta1::{MsgSwapExactAmountIn, SwapAmountInRoute},
 };
-use osmosis_test_tube::{cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx, osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, FeeSetting, Gamm, Module, OsmosisTestApp, Runner, RunnerExecuteResult, RunnerResult, SigningAccount, Wasm, Bank};
+use osmosis_test_tube::{
+    cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx,
+    osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, Bank, FeeSetting, Gamm, Module,
+    OsmosisTestApp, Runner, RunnerExecuteResult, RunnerResult, SigningAccount, Wasm,
+};
 use time::{Duration, OffsetDateTime};
 
 use crate::{
@@ -119,7 +123,7 @@ fn test_no_conversion() {
     );
     assert_substring!(
         res.as_ref().unwrap_err().to_string(),
-        SpendLimitError::overspend(0, 2500).to_string()
+        SpendLimitError::overspend(1_500_000, 1_502_500).to_string()
     );
 
     let prev_ts = app.get_block_time_seconds() as i64;
@@ -161,7 +165,7 @@ fn test_no_conversion() {
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(2500, 2501).to_string()
+        SpendLimitError::overspend(1_500_000, 1_500_001).to_string()
     );
 }
 #[test]
@@ -169,14 +173,10 @@ fn test_fee_draining() {
     let app = OsmosisTestApp::new();
     set_maximum_unauthenticated_gas(&app, MAXIMUM_UNAUTHENTICATED_GAS);
 
-    let initial_balance =[Coin::new(1_000_000_000_000_000, "uosmo")];
-    let acc_1 = app
-        .init_account(&initial_balance)
-        .unwrap();
+    let initial_balance = [Coin::new(1_000_000_000_000_000, "uosmo")];
+    let acc_1 = app.init_account(&initial_balance).unwrap();
 
-    let acc_2 = app
-        .init_account(&initial_balance)
-        .unwrap();
+    let acc_2 = app.init_account(&initial_balance).unwrap();
 
     let wasm = Wasm::new(&app);
     let bank = Bank::new(&app);
@@ -229,11 +229,19 @@ fn test_fee_draining() {
         vec![Coin::new(1, "xxx")], // invalid denom
         spend_limit_auth_id,
     )
-        .unwrap_err();
+    .unwrap_err();
 
     // check that fee has been deducted
-    let acc_1_balance = bank.query_balance(&QueryBalanceRequest { address: acc_1_custom_fee.address(), denom: "uosmo".to_string() }).unwrap();
-    assert_eq!(acc_1_balance.balance.unwrap(), Coin::new(1_000_000_000_000_000 - 500000 - 5000, "uosmo").into());
+    let acc_1_balance = bank
+        .query_balance(&QueryBalanceRequest {
+            address: acc_1_custom_fee.address(),
+            denom: "uosmo".to_string(),
+        })
+        .unwrap();
+    assert_eq!(
+        acc_1_balance.balance.unwrap(),
+        Coin::new(1_000_000_000_000_000 - 500000 - 5000, "uosmo").into()
+    );
 
     let acc_1_custom_fee = acc_1_custom_fee.with_fee_setting(FeeSetting::Custom {
         amount: Coin::new(1_000_000, "uosmo"),
@@ -249,7 +257,7 @@ fn test_fee_draining() {
         vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     )
-        .unwrap_err();
+    .unwrap_err();
 
     assert_substring!(
         err.to_string(),
@@ -257,18 +265,23 @@ fn test_fee_draining() {
     );
 
     // check that fee has been deducted
-    let acc_1_balance = bank.query_balance(&QueryBalanceRequest { address: acc_1_custom_fee.address(), denom: "uosmo".to_string() }).unwrap();
-    assert_eq!(acc_1_balance.balance.unwrap(), Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into());
+    let acc_1_balance = bank
+        .query_balance(&QueryBalanceRequest {
+            address: acc_1_custom_fee.address(),
+            denom: "uosmo".to_string(),
+        })
+        .unwrap();
+    assert_eq!(
+        acc_1_balance.balance.unwrap(),
+        Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into()
+    );
 
     // spending will not yet be updated (to be fixed)
     assert_eq!(
         spend_limit_querier
             .query_spendings_by_account(acc_1_custom_fee.address())
             .unwrap(),
-        vec![(
-            "1".to_string(),
-            Spending::default()
-        )]
+        vec![("1".to_string(), Spending::default())]
     );
 
     // spend some more
@@ -286,12 +299,20 @@ fn test_fee_draining() {
     );
     assert_substring!(
         res.as_ref().unwrap_err().to_string(),
-        SpendLimitError::overspend(0, 2500).to_string()
+        SpendLimitError::overspend(1500000, 1502500).to_string()
     );
 
     // this should block at authenticate, which means fee shouldn't be deducted
-    let acc_1_balance = bank.query_balance(&QueryBalanceRequest { address: acc_1_custom_fee.address(), denom: "uosmo".to_string() }).unwrap();
-    assert_eq!(acc_1_balance.balance.unwrap(), Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into());
+    let acc_1_balance = bank
+        .query_balance(&QueryBalanceRequest {
+            address: acc_1_custom_fee.address(),
+            denom: "uosmo".to_string(),
+        })
+        .unwrap();
+    assert_eq!(
+        acc_1_balance.balance.unwrap(),
+        Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into()
+    );
 
     let prev_ts = app.get_block_time_seconds() as i64;
     let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
@@ -308,7 +329,7 @@ fn test_fee_draining() {
         vec![Coin::new(1_400_000, "uosmo")],
         spend_limit_auth_id,
     )
-        .unwrap();
+    .unwrap();
 
     bank_send(
         &app,
@@ -318,7 +339,7 @@ fn test_fee_draining() {
         vec![Coin::new(92_500, "uosmo")],
         spend_limit_auth_id,
     )
-        .unwrap();
+    .unwrap();
 
     let err = bank_send(
         &app,
@@ -328,11 +349,11 @@ fn test_fee_draining() {
         vec![Coin::new(1, "uosmo")],
         spend_limit_auth_id,
     )
-        .unwrap_err();
+    .unwrap_err();
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(2500, 2501).to_string()
+        SpendLimitError::overspend(1_500_000, 1_500_001).to_string()
     );
 }
 
@@ -541,7 +562,7 @@ fn test_with_conversion() {
     let fee_in_uusdc = 3750; // 3750uusdc = 2500usmo * 1,5
     assert_substring!(
         res.as_ref().unwrap_err().to_string(),
-        SpendLimitError::overspend(1, fee_in_uusdc).to_string()
+        SpendLimitError::overspend(1000000, 999_999 + fee_in_uusdc).to_string() // 999_999 is previous spend, this failed due to fee
     );
 
     let prev_ts = app.get_block_time_seconds() as i64;
@@ -583,7 +604,7 @@ fn test_with_conversion() {
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(1, fee_in_uusdc).to_string()
+        SpendLimitError::overspend(1000000, 999_999 + fee_in_uusdc).to_string() // 999_999 is previous spend, this failed due to fee
     );
 }
 

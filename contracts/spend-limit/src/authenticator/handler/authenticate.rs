@@ -63,6 +63,8 @@ pub fn authenticate(
         env.block.time,
     )?;
 
+    // TODO: Better error that tells the fact that overspending comes from untracked spent fee
+
     Ok(Response::new().add_attribute("action", "authenticate"))
 }
 
@@ -215,12 +217,12 @@ mod tests {
     #[case::fee_spent_over_the_limit("account", None,
         vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_002, "uusdc")],
         vec![],
-        Err(SpendLimitError::overspend(500_000_001, 500_000_002).into()))
+        Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
         vec![Coin::new(333_333_333, "uosmo")],
         vec![Coin::new(500_000_002, "uusdc")],
-        Err(SpendLimitError::overspend(499_999_998, 499_999_999).into()))
+        Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit_by_fee_grant("account", Some("granter"),
         vec![Coin::new(1_000_000_001, "uusdc")],
