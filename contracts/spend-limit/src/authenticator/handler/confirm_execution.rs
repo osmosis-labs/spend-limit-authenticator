@@ -33,7 +33,7 @@ pub fn confirm_execution(
 
     let pre_exec_balances = pre_exec_balances.try_into()?;
     let post_exec_balances = post_exec_balances.try_into()?;
-    let mut spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
+    let mut spent_coins = calculate_spent_coins(&pre_exec_balances, &post_exec_balances)?;
 
     // Get recent untracked spent fee, the latest fee is already captured in the balance difference, so we need to subtract it
     let untracked_spent_fee = UNTRACKED_SPENT_FEES

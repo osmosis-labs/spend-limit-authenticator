@@ -81,8 +81,8 @@ impl Spending {
 /// Calculate the spendings from the pre-execution balances and the post-execution balances.
 /// Ignores received coins.
 pub fn calculate_spent_coins(
-    pre_exec_balances: Coins,
-    post_exec_balances: Coins,
+    pre_exec_balances: &Coins,
+    post_exec_balances: &Coins,
 ) -> Result<Coins, SpendLimitError> {
     let mut spent_coins = Coins::default();
 
@@ -90,18 +90,39 @@ pub fn calculate_spent_coins(
     // We ignore the post-execution denoms that were not present in the pre-execution denoms
     // because that means they were received, not spent
     for pre_exec_balance in pre_exec_balances.into_iter() {
-        let denom = pre_exec_balance.denom;
+        let denom = &pre_exec_balance.denom;
         let pre_exec_amount = pre_exec_balance.amount;
-        let post_exec_amount = post_exec_balances.amount_of(&denom);
+        let post_exec_amount = post_exec_balances.amount_of(denom);
 
         let spent_amount = pre_exec_amount.saturating_sub(post_exec_amount).u128();
-        spent_coins.add(Coin::new(spent_amount, &denom))?;
+        spent_coins.add(Coin::new(spent_amount, denom))?;
     }
 
     Ok(spent_coins)
 }
 
-// TODO: calculate received coins
+// Calculate the received coins from the pre-execution balances and the post-execution balances.
+// Ignores spent coins.
+pub fn calculate_received_coins(
+    pre_exec_balances: &Coins,
+    post_exec_balances: &Coins,
+) -> Result<Coins, SpendLimitError> {
+    let mut received_coins = Coins::default();
+
+    // Goes through all post-execution balances and checks if they were received.
+    // We ignore the pre-execution denoms that were not present in the post-execution denoms
+    // because that means they were spent, not received
+    for post_exec_balance in post_exec_balances.into_iter() {
+        let denom = &post_exec_balance.denom;
+        let post_exec_amount = post_exec_balance.amount;
+        let pre_exec_amount = pre_exec_balances.amount_of(denom);
+
+        let received_amount = post_exec_amount.saturating_sub(pre_exec_amount).u128();
+        received_coins.add(Coin::new(received_amount, denom))?;
+    }
+
+    Ok(received_coins)
+}
 
 #[cfg(test)]
 mod tests {
@@ -240,7 +261,7 @@ mod tests {
             Coin::new(1, "usomething"),
         ]
     )]
-    #[case::spend_and_receive(
+    #[case::spend(
         vec![Coin::new(100, "uosmo"), Coin::new(200, "usomething")],
         vec![Coin::new(99, "uosmo")],
         vec![
@@ -263,7 +284,56 @@ mod tests {
     ) {
         let balances_before_spent = Coins::try_from(balances_before_spent).unwrap();
         let balances_after_spent = Coins::try_from(balances_after_spent).unwrap();
-        let deltas = calculate_spent_coins(balances_before_spent, balances_after_spent).unwrap();
+        let deltas = calculate_spent_coins(&balances_before_spent, &balances_after_spent).unwrap();
+        let expected = Coins::try_from(expected).unwrap();
+        assert_eq!(expected, deltas);
+    }
+
+    #[rstest]
+    #[case::no_delta(vec![], vec![], vec![])]
+    #[case::no_delta(vec![Coin::new(100, "uosmo")], balances_before_spent.clone(), vec![])]
+    #[case::no_delta(vec![Coin::new(100, "uosmo"), Coin::new(1023, "usomething")], balances_before_spent.clone(), vec![])]
+    #[case::receive(
+        vec![Coin::new(100, "uosmo")],
+        vec![Coin::new(100, "uosmo"), Coin::new(200, "usomething")],
+        vec![Coin::new(200, "usomething")]
+    )]
+    #[case::receive(
+        vec![Coin::new(100, "uosmo")],
+        vec![Coin::new(101, "uosmo"), Coin::new(200, "usomething")],
+        vec![Coin::new(1, "uosmo"), Coin::new(200, "usomething")]
+    )]
+    #[case::spend(
+        vec![Coin::new(100, "uosmo"), Coin::new(200, "usomething")],
+        vec![Coin::new(99, "uosmo"), Coin::new(200, "usomething")],
+        vec![]
+    )]
+    #[case::spend(
+        vec![Coin::new(100, "uosmo"), Coin::new(200, "usomething")],
+        vec![Coin::new(99, "uosmo"), Coin::new(199, "usomething")],
+        vec![]
+    )]
+    #[case::spend(
+        vec![Coin::new(100, "uosmo"), Coin::new(200, "usomething")],
+        vec![Coin::new(99, "uosmo")],
+        vec![]
+    )]
+    #[case::mixed(
+        vec![Coin::new(100, "uosmo"), Coin::new(200, "usomething")],
+        vec![Coin::new(99, "uosmo"), Coin::new(200, "usomething"), Coin::new(100, "uother")],
+        vec![
+            Coin::new(100, "uother"),
+        ]
+    )]
+    pub fn test_calculate_received_coins(
+        #[case] balances_before_spent: Vec<Coin>,
+        #[case] balances_after_spent: Vec<Coin>,
+        #[case] expected: Vec<Coin>,
+    ) {
+        let balances_before_spent = Coins::try_from(balances_before_spent).unwrap();
+        let balances_after_spent = Coins::try_from(balances_after_spent).unwrap();
+        let deltas =
+            calculate_received_coins(&balances_before_spent, &balances_after_spent).unwrap();
         let expected = Coins::try_from(expected).unwrap();
         assert_eq!(expected, deltas);
     }
