@@ -5,7 +5,7 @@ use cosmwasm_std::Coin;
 
 pub use error::SpendLimitError;
 pub use params::{SpendLimitParams, TimeLimit};
-pub use spending::{calculate_spent_coins, Spending};
+pub use spending::{calculate_received_coins, calculate_spent_coins, Spending};
 
 use cosmwasm_std::Addr;
 use cw_storage_plus::Map;

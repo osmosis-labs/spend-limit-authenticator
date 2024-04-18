@@ -48,6 +48,17 @@ impl Spending {
         Ok(self)
     }
 
+    pub fn update(
+        &mut self,
+        value_spent_in_period: Uint128,
+        last_spent_at: Timestamp,
+    ) -> &mut Self {
+        self.value_spent_in_period = value_spent_in_period;
+        self.last_spent_at = last_spent_at;
+
+        self
+    }
+
     /// ensure that the value spent in the period is not over the limit
     pub fn ensure_within_limit(&self, limit: Uint128) -> SpendLimitResult<()> {
         if self.value_spent_in_period > limit {
@@ -62,7 +73,7 @@ impl Spending {
 
     /// Get the value spent in the period.
     /// If the period has changed, the value spent in the period is reset to zero.
-    fn get_or_reset_value_spent(
+    pub fn get_or_reset_value_spent(
         &self,
         period: &Period,
         at: Timestamp,

@@ -1,4 +1,6 @@
-use cosmwasm_std::{Addr, Coin, DepsMut, Timestamp, Uint128};
+use std::cmp::max;
+
+use cosmwasm_std::{Addr, Coin, DepsMut, Fraction, StdError, Timestamp, Uint128};
 
 use crate::{
     period::Period,
@@ -26,28 +28,64 @@ pub fn get_account_spending_fee(
     }
 }
 
-// TODO: calculate diff properly,
-pub fn try_spend_all(
+pub fn update_and_check_spend_limit(
     mut deps: DepsMut,
     spending: &mut Spending,
-    coins: impl IntoIterator<Item = Coin>,
+    spent_coins: impl IntoIterator<Item = Coin>,
+    received_coins: impl IntoIterator<Item = Coin>,
     conf: &PriceResolutionConfig,
     limit: Uint128,
     reset_period: &Period,
     time: Timestamp,
 ) -> Result<(), ContractError> {
-    for coin in coins.into_iter() {
-        // If the coin is not tracked (hence get_and_cache_price = None), we don't count it towards the spending limit
-        let Some(price_info) =
-            get_and_cache_price(&PRICE_INFOS, deps.branch(), &conf, time, &coin.denom)?
-        else {
+    let prev_value_spent = spending.get_or_reset_value_spent(reset_period, time)?;
+    let mut value_spent = prev_value_spent.clone();
+
+    for spent in spent_coins.into_iter() {
+        // If the coin is not tracked (hence quoted_value = None), we don't count it towards the spending limit
+        let Some(spent_coin_value) = get_value(deps.branch(), conf, time, spent)? else {
             continue;
         };
 
-        spending.unchecked_spend(coin.amount, price_info.price, reset_period, time)?;
+        value_spent = value_spent
+            .checked_add(spent_coin_value)
+            .map_err(StdError::from)?;
     }
 
-    spending.ensure_within_limit(limit)?;
+    for received in received_coins.into_iter() {
+        // If the coin is not tracked (hence quoted_value = None), we don't count it towards the spending limit
+        let Some(received_coin_value) = get_value(deps.branch(), conf, time, received)? else {
+            continue;
+        };
+
+        value_spent = value_spent
+            .checked_sub(received_coin_value)
+            .map_err(StdError::from)?;
+    }
+
+    // updated value spent is only allowed to increase or stay the same
+    let value_spent = max(prev_value_spent, value_spent);
+
+    spending
+        .update(value_spent, time)
+        .ensure_within_limit(limit)?;
 
     Ok(())
+}
+
+fn get_value(
+    deps: DepsMut,
+    conf: &PriceResolutionConfig,
+    time: Timestamp,
+    coin: Coin,
+) -> Result<Option<Uint128>, ContractError> {
+    let Some(price_info) = get_and_cache_price(&PRICE_INFOS, deps, &conf, time, &coin.denom)?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(coin.amount.multiply_ratio(
+        price_info.price.numerator(),
+        price_info.price.denominator(),
+    )))
 }

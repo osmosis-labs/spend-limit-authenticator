@@ -1,8 +1,8 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::authenticator::common::{get_account_spending_fee, try_spend_all};
-use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
+use crate::authenticator::common::{get_account_spending_fee, update_and_check_spend_limit};
+use crate::spend_limit::{calculate_received_coins, calculate_spent_coins, SpendLimitParams};
 use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 
@@ -56,15 +56,16 @@ pub fn confirm_execution(
         spent_coins.sub(fee)?;
     }
 
-    // TODO: calculate received coins
+    let received_coins = calculate_received_coins(&pre_exec_balances, &post_exec_balances)?;
 
     let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
-
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
-    try_spend_all(
+
+    update_and_check_spend_limit(
         deps.branch(),
         &mut spending,
         spent_coins,
+        received_coins,
         &conf,
         params.limit,
         &params.reset_period,

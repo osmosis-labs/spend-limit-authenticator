@@ -1,8 +1,8 @@
-use cosmwasm_std::{DepsMut, Env, Response, Timestamp};
+use cosmwasm_std::{Coins, DepsMut, Env, Response, Timestamp};
 use osmosis_authenticators::AuthenticationRequest;
 
 use crate::{
-    authenticator::common::{get_account_spending_fee, try_spend_all},
+    authenticator::common::{get_account_spending_fee, update_and_check_spend_limit},
     state::{PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES},
     ContractError,
 };
@@ -53,10 +53,11 @@ pub fn authenticate(
     // check whether the fee spent + about to spend is within the limit
     // this will not be committed to the state
     let coins = vec![untracked_spent_fee, account_spending_fee].concat();
-    try_spend_all(
+    update_and_check_spend_limit(
         deps,
         &mut spending,
         coins,
+        Coins::default(),
         &conf,
         params.limit,
         &params.reset_period,
