@@ -65,6 +65,9 @@ pub fn authenticate(
     )?;
 
     // TODO: Better error that tells the fact that overspending comes from untracked spent fee
+    // - error spend limit is over from the previously failed transaction `UntrackedSpentFee`
+    // - error spend limit is over from the fee `CurrentFee`
+    // - else: `AfterTransaction`
 
     Ok(Response::new().add_attribute("action", "authenticate"))
 }
@@ -197,7 +200,7 @@ mod tests {
     #[case::fee_spent_to_the_limit("account", None, vec![Coin::new(666_666_666, "uosmo")], vec![], Ok(()))]
     #[case::fee_spent_to_the_limit_with_untracked_denoms("account", None,
         vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_000, "untracked1")],
-        vec![Coin::new(500_000_001, "uusdc"), Coin::new(500_000_000, "untracked2")],
+        vec![Coin::new(500_000_000, "uusdc"), Coin::new(500_000_000, "untracked2")],
         Ok(()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
@@ -216,13 +219,13 @@ mod tests {
         Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
-        vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_002, "uusdc")],
+        vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_001, "uusdc")],
         vec![],
         Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
         vec![Coin::new(333_333_333, "uosmo")],
-        vec![Coin::new(500_000_002, "uusdc")],
+        vec![Coin::new(500_000_001, "uusdc")],
         Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit_by_fee_grant("account", Some("granter"),

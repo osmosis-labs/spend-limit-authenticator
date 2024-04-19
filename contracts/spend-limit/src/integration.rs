@@ -720,6 +720,7 @@ fn test_setup_and_teardown() {
     assert_eq!(spendings, vec![("2.1".to_string(), Spending::default())]);
 }
 
+// TODO: update this test and unignore
 #[test]
 #[ignore = "this test will require update again when introducing counting slippage & fee towards spending when swap"]
 fn test_1_click_trading() {
