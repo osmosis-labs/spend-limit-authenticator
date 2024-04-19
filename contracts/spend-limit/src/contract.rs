@@ -2,14 +2,15 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult,
+    StdResult, Timestamp,
 };
 use cw2::set_contract_version;
 
 use crate::authenticator;
 use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
+use crate::period::Period;
 use crate::price::track_denom;
-use crate::spend_limit::SpendLimitError;
+use crate::spend_limit::{SpendLimitError, Spending};
 use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
 
@@ -76,14 +77,21 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
         QueryMsg::Spending {
             account,
             authenticator_id,
+            reset_period,
         } => {
             let account = deps.api.addr_validate(&account)?;
-            to_json_binary(&query_spending(deps, account, authenticator_id)?)
+            to_json_binary(&query_spending(
+                deps,
+                account,
+                authenticator_id,
+                &reset_period,
+                env.block.time,
+            )?)
         }
         QueryMsg::SpendingsByAccount { account } => {
             let account = deps.api.addr_validate(&account)?;
@@ -93,15 +101,21 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     .map_err(ContractError::from)
 }
 
-// TODO: check period, if has changed, reset value_spent_in_period to 0
 // TODO: add untracked spent fee
 pub fn query_spending(
     deps: Deps,
     account: Addr,
     authenticator_id: String,
+    reset_period: &Period,
+    at: Timestamp,
 ) -> Result<SpendingResponse, ContractError> {
     match SPENDINGS.may_load(deps.storage, (&account, authenticator_id.as_str()))? {
-        Some(spending) => Ok(SpendingResponse { spending }),
+        Some(spending) => Ok(SpendingResponse {
+            spending: Spending {
+                value_spent_in_period: spending.get_or_reset_value_spent(reset_period, at)?,
+                ..spending
+            },
+        }),
         None => Err(SpendLimitError::SpendLimitNotFound {
             address: account,
             authenticator_id,
@@ -277,6 +291,7 @@ mod tests {
                 QueryMsg::Spending {
                     account: "limited_account".to_string(),
                     authenticator_id: "2".to_string(),
+                    reset_period: Period::Day,
                 },
             )
             .unwrap(),
@@ -337,6 +352,7 @@ mod tests {
             QueryMsg::Spending {
                 account: "limited_account".to_string(),
                 authenticator_id: "2".to_string(),
+                reset_period: Period::Day,
             },
         )
         .unwrap_err();

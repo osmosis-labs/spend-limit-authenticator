@@ -943,6 +943,7 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
+                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1059,6 +1060,7 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_2}.1"),
+                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1075,6 +1077,7 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
+                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1084,18 +1087,18 @@ fn test_1_click_trading() {
     // increases time for 2 days
     app.increase_time(24 * 60 * 60 * 2);
 
-    // // TODO: make this test pass: query spending for session 1
-    // // let SpendingResponse { spending } = wasm
-    // //     .query(
-    // //         &contract_addr,
-    // //         &QueryMsg::Spending {
-    // //             account: account_owner.address(),
-    // //             authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
-    // //         },
-    // //     )
-    // //     .unwrap();
+    let SpendingResponse { spending } = wasm
+        .query(
+            &contract_addr,
+            &QueryMsg::Spending {
+                account: account_owner.address(),
+                authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
+                reset_period: Period::Day,
+            },
+        )
+        .unwrap();
 
-    // // assert_eq!(spending.value_spent_in_period.u128(), 0);
+    assert_eq!(spending.value_spent_in_period.u128(), 0);
 
     // spend to the limit
     let uusdc_in: u128 = 10;
@@ -1146,6 +1149,7 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
+                reset_period: Period::Day,
             },
         )
         .unwrap();
