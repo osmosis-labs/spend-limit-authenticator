@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Coins, Fraction, Timestamp, Uint128};
+use cosmwasm_std::{Coin, Coins, Timestamp, Uint128};
 
 use crate::{
     period::{to_offset_datetime, Period},
@@ -27,25 +27,6 @@ impl Spending {
             value_spent_in_period: Uint128::zero(),
             last_spent_at: last_spent,
         }
-    }
-
-    pub fn unchecked_spend(
-        &mut self,
-        amount: Uint128,
-        price: impl Fraction<Uint128>,
-        period: &Period,
-        at: Timestamp,
-    ) -> SpendLimitResult<&mut Self> {
-        // TODO: maybe rounding up is better?
-        let spending_value = amount.multiply_ratio(price.numerator(), price.denominator());
-
-        let value_spent_in_period = self.get_or_reset_value_spent(period, at)?;
-        let updated_value_spent_in_period = value_spent_in_period.checked_add(spending_value)?;
-
-        self.value_spent_in_period = updated_value_spent_in_period;
-        self.last_spent_at = at;
-
-        Ok(self)
     }
 
     pub fn update(
@@ -139,111 +120,6 @@ pub fn calculate_received_coins(
 mod tests {
     use super::*;
     use rstest::rstest;
-
-    use cosmwasm_std::Decimal;
-    use time::macros::datetime;
-    use time::OffsetDateTime;
-
-    #[test]
-    fn test_spending_flow() {
-        // create new spending tracker
-        let mut spending = Spending::default();
-        let period = Period::Day;
-
-        assert_eq!(spending.value_spent_in_period, Uint128::zero());
-        assert_eq!(spending.last_spent_at, Timestamp::from_nanos(0));
-
-        // try spending half the limit
-        let limit = Uint128::from(100_000_000u128);
-        let at = to_timestamp(datetime!(2024-01-01 00:00:00 UTC));
-        let conversion_rate = Decimal::one();
-
-        spending
-            .unchecked_spend(Uint128::from(50_000_000u128), conversion_rate, &period, at)
-            .unwrap()
-            .ensure_within_limit(limit)
-            .unwrap();
-
-        assert_eq!(
-            spending.value_spent_in_period,
-            Uint128::from(50_000_000u128)
-        );
-        assert_eq!(spending.last_spent_at, at);
-
-        // try spending a bit over the limit
-        let at = to_timestamp(datetime!(2024-01-01 23:59:59 UTC));
-        let err = spending
-            .clone()
-            .unchecked_spend(Uint128::from(50_000_001u128), conversion_rate, &period, at)
-            .unwrap()
-            .ensure_within_limit(limit)
-            .unwrap_err();
-
-        assert_eq!(
-            err,
-            SpendLimitError::Overspend {
-                limit: Uint128::from(100_000_000u128),
-                spent: Uint128::from(100_000_001u128),
-            }
-        );
-
-        // try spending a all the limit
-        let at = to_timestamp(datetime!(2024-01-01 23:59:59 UTC));
-        let spending = spending
-            .unchecked_spend(Uint128::from(50_000_000u128), conversion_rate, &period, at)
-            .unwrap();
-
-        spending.ensure_within_limit(limit).unwrap();
-
-        assert_eq!(
-            spending.value_spent_in_period,
-            Uint128::from(100_000_000u128)
-        );
-        assert_eq!(spending.last_spent_at, at);
-
-        // reset if new period
-        let at = to_timestamp(datetime!(2024-01-02 00:00:00 UTC));
-        let spending = spending
-            .unchecked_spend(Uint128::zero(), conversion_rate, &period, at)
-            .unwrap();
-
-        spending.ensure_within_limit(limit).unwrap();
-
-        assert_eq!(spending.value_spent_in_period, Uint128::zero());
-        assert_eq!(spending.last_spent_at, at);
-    }
-
-    #[test]
-    fn test_spending_with_value_conversion() {
-        let mut spending = Spending::default();
-        let conversion_rate = Decimal::from_ratio(1u128, 200_000u128);
-        let period = Period::Month;
-
-        // try spending half the limit
-        let limit = Uint128::from(100_000_000u128);
-        let at = to_timestamp(datetime!(2024-01-01 00:00:00 UTC));
-
-        spending
-            .unchecked_spend(
-                Uint128::from(50_000_000u128 * 200_000u128),
-                conversion_rate,
-                &period,
-                at,
-            )
-            .unwrap()
-            .ensure_within_limit(limit)
-            .unwrap();
-
-        assert_eq!(
-            spending.value_spent_in_period,
-            Uint128::from(50_000_000u128)
-        );
-        assert_eq!(spending.last_spent_at, at);
-    }
-
-    fn to_timestamp(offset_datetime: OffsetDateTime) -> Timestamp {
-        Timestamp::from_nanos(offset_datetime.unix_timestamp_nanos() as u64)
-    }
 
     #[rstest]
     #[case::no_delta(vec![], vec![], vec![])]
