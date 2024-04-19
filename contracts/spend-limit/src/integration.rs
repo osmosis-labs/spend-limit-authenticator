@@ -4,7 +4,9 @@
 
 use cosmwasm_std::{Coin, Timestamp, Uint128};
 use osmosis_std::types::cosmos::bank::v1beta1::QueryBalanceRequest;
-
+use osmosis_std::types::osmosis::poolmanager::v1beta1::{
+    EstimateSwapExactAmountInRequest, EstimateSwapExactAmountInResponse,
+};
 use osmosis_std::types::osmosis::{
     authenticator::{self, MsgRemoveAuthenticator, MsgRemoveAuthenticatorResponse},
     gamm::v1beta1::MsgSwapExactAmountInResponse,
@@ -17,6 +19,7 @@ use osmosis_test_tube::{
 };
 use time::{Duration, OffsetDateTime};
 
+use crate::ContractError;
 use crate::{
     assert_substring,
     msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, TrackedDenom},
@@ -27,7 +30,6 @@ use crate::{
         add_1ct_session_authenticator, add_all_of_sig_ver_spend_limit_authenticator,
         add_spend_limit_authenticator, spend_limit_instantiate, spend_limit_store_code,
     },
-    ContractError,
 };
 
 const UUSDC: &str = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
@@ -720,9 +722,7 @@ fn test_setup_and_teardown() {
     assert_eq!(spendings, vec![("2.1".to_string(), Spending::default())]);
 }
 
-// TODO: update this test and unignore
 #[test]
-#[ignore = "this test will require update again when introducing counting slippage & fee towards spending when swap"]
 fn test_1_click_trading() {
     let app = OsmosisTestApp::new();
 
@@ -840,19 +840,25 @@ fn test_1_click_trading() {
         &acc,
     );
 
-    let account_owner = &acc;
+    let fee_in_osmo = 4000;
+    let account_owner = acc.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(fee_in_osmo, "uosmo"),
+        gas_limit: 1_000_000,
+    });
     let one_click_trading_session_signer_1 = &empty_accs[0];
     let one_click_trading_session_pubkey_1 =
         one_click_trading_session_signer_1.public_key().to_bytes();
 
     let session_1_end = Timestamp::from_seconds(app.get_block_time_seconds() as u64).plus_days(3);
+
+    let limit = 5_000_000_000;
     let one_click_trading_auth_id_1 = add_1ct_session_authenticator(
         &app,
         &account_owner,
         &one_click_trading_session_pubkey_1,
         &contract_addr,
         &SpendLimitParams {
-            limit: Uint128::new(5_000_000_000),
+            limit: limit.into(),
             reset_period: Period::Day,
             time_limit: Some(TimeLimit {
                 start: None,
@@ -862,6 +868,7 @@ fn test_1_click_trading() {
     );
 
     // only `MsgSwapExactAmountIn` and `MsgSplitRouteSwapExactAmountIn` are allowed
+    // failed at authenticate (which is in ante, prior to deduct fee) so no fee is deducted
     let err = bank_send(
         &app,
         &account_owner,
@@ -878,6 +885,7 @@ fn test_1_click_trading() {
     );
 
     // wrong signer
+    // failed at authenticate (which is in ante, prior to deduct fee) so no fee is deducted
     let wrong_signer = &empty_accs[1];
     let err = one_click_swap_exact_amount_in(
         &app,
@@ -894,10 +902,26 @@ fn test_1_click_trading() {
     .unwrap_err();
     assert_substring!(err.to_string(), "signature verification failed".to_string());
 
-    let account_owner = acc.with_fee_setting(FeeSetting::Custom {
-        amount: Coin::new(1_000_000, UUSDC),
-        gas_limit: 1_000_000,
-    });
+    let osmo_out: u128 = app
+        .query::<_, EstimateSwapExactAmountInResponse>(
+            "/osmosis.poolmanager.v1beta1.Query/EstimateSwapExactAmountIn",
+            #[allow(deprecated)] // pool id is deprecated
+            &EstimateSwapExactAmountInRequest {
+                pool_id: 0,
+                token_in: format!("{}{}", 100, UUSDC),
+                routes: vec![SwapAmountInRoute {
+                    pool_id: osmo_usdc_pool_id,
+                    token_out_denom: "uosmo".to_string(),
+                }],
+            },
+        )
+        .unwrap()
+        .token_out_amount
+        .parse()
+        .unwrap();
+
+    let uusdc_in = 100;
+
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
@@ -906,7 +930,7 @@ fn test_1_click_trading() {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),
         }],
-        Coin::new(100, UUSDC),
+        Coin::new(uusdc_in, UUSDC),
         1,
         one_click_trading_auth_id_1,
     )
@@ -923,9 +947,40 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), 3_750_000 + 100);
+    let s1_spent = uusdc_in + ((fee_in_osmo - osmo_out) * 15 / 10) + 1; // +1 due to rounding
+    assert_eq!(spending.value_spent_in_period.u128(), s1_spent);
+
+    let s1_remaining = limit - s1_spent;
 
     // swap ion to atom with overspend
+    let fee_in_osmo = s1_remaining * 10 / 15;
+    let account_owner = account_owner.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new(fee_in_osmo, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
+    let atom_out: u128 = app
+        .query::<_, EstimateSwapExactAmountInResponse>(
+            "/osmosis.poolmanager.v1beta1.Query/EstimateSwapExactAmountIn",
+            #[allow(deprecated)] // pool id is deprecated
+            &EstimateSwapExactAmountInRequest {
+                pool_id: 0,
+                token_in: format!("{}{}", 10, "uion"),
+                routes: vec![SwapAmountInRoute {
+                    pool_id: ion_atom_pool_id,
+                    token_out_denom: UATOM.to_string(),
+                }],
+            },
+        )
+        .unwrap()
+        .token_out_amount
+        .parse()
+        .unwrap();
+
+    let ion_in_value = 4; // 10 * 1.5 / 4 = 3.75 ~> 4
+    let atom_out_value = atom_out * 15 / 10; // atom_out * 1.5, atom out = 2 so no need to manually round
+    let slippage = ion_in_value - atom_out_value;
+
     let err = one_click_swap_exact_amount_in(
         &app,
         &account_owner,
@@ -934,9 +989,7 @@ fn test_1_click_trading() {
             pool_id: ion_atom_pool_id,
             token_out_denom: UATOM.to_string(),
         }],
-        // remaining quota in uion = ((5_000_000_000 - 100) / 1.5) * 4 ~= 1_333_333_067
-        // +((1 / 1.5) * 4) ~= 3 to make it overspend
-        Coin::new(13_333_333_070, "uion"),
+        Coin::new(10, "uion"),
         1,
         one_click_trading_auth_id_1,
     )
@@ -944,7 +997,7 @@ fn test_1_click_trading() {
 
     assert_substring!(
         err.to_string(),
-        SpendLimitError::overspend(4999999900, 4999999901).to_string()
+        SpendLimitError::overspend(limit, s1_spent + s1_remaining + slippage).to_string()
     );
 
     // create another session
@@ -993,9 +1046,7 @@ fn test_1_click_trading() {
             pool_id: ion_atom_pool_id,
             token_out_denom: UATOM.to_string(),
         }],
-        // remaining quota in uion = ((5_000_000_000 - 100) / 1.5) * 4 ~= 1_333_333_067
-        // +((1 / 1.5) * 4) ~= 3 to make it overspend
-        Coin::new(13_333_333_070, "uion"),
+        Coin::new(10, "uion"),
         1,
         one_click_trading_auth_id_2,
     )
@@ -1012,7 +1063,10 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), 4_999_999_901);
+    assert_eq!(
+        spending.value_spent_in_period.u128(),
+        s1_remaining + slippage
+    );
 
     // query spending for session 1
     let SpendingResponse { spending } = wasm
@@ -1025,25 +1079,52 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), 100);
+    assert_eq!(spending.value_spent_in_period.u128(), s1_spent);
 
     // increases time for 2 days
     app.increase_time(24 * 60 * 60 * 2);
 
-    // TODO: make this test pass: query spending for session 1
-    // let SpendingResponse { spending } = wasm
-    //     .query(
-    //         &contract_addr,
-    //         &QueryMsg::Spending {
-    //             account: account_owner.address(),
-    //             authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
-    //         },
-    //     )
-    //     .unwrap();
+    // // TODO: make this test pass: query spending for session 1
+    // // let SpendingResponse { spending } = wasm
+    // //     .query(
+    // //         &contract_addr,
+    // //         &QueryMsg::Spending {
+    // //             account: account_owner.address(),
+    // //             authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
+    // //         },
+    // //     )
+    // //     .unwrap();
 
-    // assert_eq!(spending.value_spent_in_period.u128(), 0);
+    // // assert_eq!(spending.value_spent_in_period.u128(), 0);
 
-    // spend almost all the quota
+    // spend to the limit
+    let uusdc_in: u128 = 10;
+    let uosmo_out: u128 = app
+        .query::<_, EstimateSwapExactAmountInResponse>(
+            "/osmosis.poolmanager.v1beta1.Query/EstimateSwapExactAmountIn",
+            #[allow(deprecated)] // pool id is deprecated
+            &EstimateSwapExactAmountInRequest {
+                pool_id: 0,
+                token_in: format!("{}{}", uusdc_in, UUSDC),
+                routes: vec![SwapAmountInRoute {
+                    pool_id: osmo_usdc_pool_id,
+                    token_out_denom: "uosmo".to_string(),
+                }],
+            },
+        )
+        .unwrap()
+        .token_out_amount
+        .parse()
+        .unwrap();
+
+    let slippage = uusdc_in - uosmo_out * 15 / 10;
+
+    // uosmo twap price at this point is 1.5000002
+    let account_owner = account_owner.with_fee_setting(FeeSetting::Custom {
+        amount: Coin::new((limit - slippage) * 10000000 / 15000002, "uosmo"),
+        gas_limit: 1_000_000,
+    });
+
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
@@ -1052,7 +1133,7 @@ fn test_1_click_trading() {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),
         }],
-        Coin::new(4_999_999_999, UUSDC),
+        Coin::new(uusdc_in, UUSDC),
         1,
         one_click_trading_auth_id_1,
     )
@@ -1069,7 +1150,7 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), 4_999_999_999);
+    assert_eq!(spending.value_spent_in_period.u128(), limit);
 
     // increase time for 1 day, which the time limit for session 1 is over (3 days)
     app.increase_time(24 * 60 * 60 * 1);
