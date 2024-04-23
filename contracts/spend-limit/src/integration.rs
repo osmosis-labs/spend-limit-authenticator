@@ -7,10 +7,11 @@ use osmosis_std::types::cosmos::bank::v1beta1::QueryBalanceRequest;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::{
     EstimateSwapExactAmountInRequest, EstimateSwapExactAmountInResponse,
 };
+use osmosis_std::types::osmosis::smartaccount;
 use osmosis_std::types::osmosis::{
-    authenticator::{self, MsgRemoveAuthenticator, MsgRemoveAuthenticatorResponse},
     gamm::v1beta1::MsgSwapExactAmountInResponse,
     poolmanager::v1beta1::{MsgSwapExactAmountIn, SwapAmountInRoute},
+    smartaccount::v1beta1::{MsgRemoveAuthenticator, MsgRemoveAuthenticatorResponse},
 };
 use osmosis_test_tube::{
     cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx,
@@ -1240,10 +1241,11 @@ fn one_click_swap_exact_amount_in(
 const MAXIMUM_UNAUTHENTICATED_GAS: u64 = 120_000;
 fn set_maximum_unauthenticated_gas(app: &OsmosisTestApp, maximum_unauthenticated_gas: u64) {
     app.set_param_set(
-        "authenticator",
-        authenticator::Params {
+        "smartaccount",
+        smartaccount::v1beta1::Params {
             maximum_unauthenticated_gas,
-            are_smart_accounts_active: true,
+            is_smart_account_active: true,
+            circuit_breaker_controllers: vec![],
         }
         .to_any(),
     )
