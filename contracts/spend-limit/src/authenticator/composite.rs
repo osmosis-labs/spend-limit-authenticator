@@ -47,6 +47,12 @@ pub struct CompositeId {
     pub path: Vec<usize>,
 }
 
+impl CompositeId {
+    pub fn new(root: u64, path: Vec<usize>) -> Self {
+        CompositeId { root, path }
+    }
+}
+
 impl FromStr for CompositeId {
     type Err = CompositeAuthenticatorError;
 
@@ -64,6 +70,19 @@ impl FromStr for CompositeId {
             .map_err(|_| CompositeAuthenticatorError::invalid_composite_id(composite_id))?;
 
         Ok(CompositeId { root, path })
+    }
+}
+
+// TODO: add test
+impl ToString for CompositeId {
+    fn to_string(&self) -> String {
+        let path = self
+            .path
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
+        format!("{}.{}", self.root, path)
     }
 }
 
@@ -87,8 +106,18 @@ impl CompositeAuthenticator for AccountAuthenticator {
             path.iter()
                 .take(path.len() - 1)
                 .try_fold(root_sub_auths, |parent, &p| {
-                    //TODO: return out of bounds error
+                    // if path is out of bound, return error
+                    // TODO: add test
+                    if p >= parent.len() {
+                        return Err(CompositeAuthenticatorError::invalid_composite_id(
+                            CompositeId::new(self.id, path.to_vec())
+                                .to_string()
+                                .as_str(),
+                        ));
+                    }
+
                     from_json(parent[p].data.as_slice())
+                        .map_err(CompositeAuthenticatorError::StdError)
                 })?;
 
         let target_idx = path

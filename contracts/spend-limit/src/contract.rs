@@ -4,7 +4,7 @@ use std::str::FromStr;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     ensure, from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order,
-    Response, StdResult, Timestamp,
+    Response, StdError, StdResult, Timestamp,
 };
 use cw2::set_contract_version;
 use osmosis_std::types::osmosis::smartaccount::v1beta1::SmartaccountQuerier;
@@ -120,7 +120,10 @@ pub fn query_spending(
 
     let spend_limit_auth_data = response
         .account_authenticator
-        .unwrap() // TODO: remove unwrap
+        .ok_or(StdError::not_found(&format!(
+            "Authenticator with account = {}, authenticator_id = {}",
+            account, authenticator_id
+        )))?
         .child_authenticator_data::<CosmwasmAuthenticatorData>(&composite_id.path)
         .map_err(AuthenticatorError::from)?;
 
