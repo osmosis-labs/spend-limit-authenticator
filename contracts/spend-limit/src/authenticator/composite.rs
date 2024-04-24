@@ -15,6 +15,9 @@ pub enum CompositeAuthenticatorError {
 
     #[error("Invalid composite id {composite_id}")]
     InvalidCompositeId { composite_id: String },
+
+    #[error("Empty requested path")]
+    EmptyRequestedPath,
 }
 
 impl CompositeAuthenticatorError {
@@ -43,20 +46,22 @@ pub struct CompositeId {
     pub root: u64,
 
     /// Path to target authenticator
-    pub path: Vec<u64>,
+    pub path: Vec<usize>,
 }
 
 impl FromStr for CompositeId {
     type Err = CompositeAuthenticatorError;
 
     fn from_str(composite_id: &str) -> Result<Self, Self::Err> {
-        let mut parts = composite_id.split('.').map(|s| s.parse::<u64>());
+        let mut parts = composite_id.split('.');
         let root = parts
             .next()
+            .map(|s| s.parse::<u64>())
             .ok_or_else(|| CompositeAuthenticatorError::invalid_composite_id(composite_id))?
             .map_err(|_| CompositeAuthenticatorError::invalid_composite_id(composite_id))?;
 
         let path = parts
+            .map(|s| s.parse::<usize>())
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| CompositeAuthenticatorError::invalid_composite_id(composite_id))?;
 
@@ -65,13 +70,13 @@ impl FromStr for CompositeId {
 }
 
 pub trait CompositeAuthenticator {
-    fn child_authenticator_data<T>(self, path: &[u64]) -> Result<T, CompositeAuthenticatorError>
+    fn child_authenticator_data<T>(self, path: &[usize]) -> Result<T, CompositeAuthenticatorError>
     where
         T: DeserializeOwned;
 }
 
 impl CompositeAuthenticator for AccountAuthenticator {
-    fn child_authenticator_data<T>(self, path: &[u64]) -> Result<T, CompositeAuthenticatorError>
+    fn child_authenticator_data<T>(self, path: &[usize]) -> Result<T, CompositeAuthenticatorError>
     where
         T: DeserializeOwned,
     {
@@ -80,11 +85,15 @@ impl CompositeAuthenticator for AccountAuthenticator {
             .iter()
             .take(path.len() - 1)
             .try_fold(root_sub_auths, |parent, &p| {
-                from_json(parent[usize::try_from(p).unwrap()].data.as_slice())
+                from_json(parent[p].data.as_slice())
             })?;
 
-        from_json(sub_auths[*path.last().unwrap() as usize].data.as_slice())
-            .map_err(CompositeAuthenticatorError::StdError)
+        let target_idx = path
+            .last()
+            .ok_or(CompositeAuthenticatorError::EmptyRequestedPath)?;
+        let target_data = sub_auths[*target_idx].data.as_slice();
+
+        from_json(target_data).map_err(CompositeAuthenticatorError::StdError)
     }
 }
 
