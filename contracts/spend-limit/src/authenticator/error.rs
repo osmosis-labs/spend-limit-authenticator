@@ -1,10 +1,15 @@
 use cosmwasm_std::{Addr, StdError};
 use thiserror::Error;
 
+use super::composite::CompositeAuthenticatorError;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum AuthenticatorError {
     #[error("{0}")]
     StdError(#[from] StdError),
+
+    #[error("{0}")]
+    CompositeAuthenticatorError(#[from] CompositeAuthenticatorError),
 
     #[error("Missing authenticator params")]
     MissingAuthenticatorParams,
@@ -20,9 +25,6 @@ pub enum AuthenticatorError {
         account: Addr,
         authenticator_id: String,
     },
-
-    #[error("Invalid composite id {composite_id}")]
-    InvalidCompositeId { composite_id: String },
 }
 
 impl AuthenticatorError {
@@ -34,12 +36,6 @@ impl AuthenticatorError {
         Self::AuthenticatorAlreadyExists {
             account,
             authenticator_id: authenticator_id.to_string(),
-        }
-    }
-
-    pub fn invalid_composite_id(composite_id: &str) -> Self {
-        Self::InvalidCompositeId {
-            composite_id: composite_id.to_string(),
         }
     }
 }
