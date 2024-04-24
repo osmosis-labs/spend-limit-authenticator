@@ -1,16 +1,20 @@
+use std::str::FromStr;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Timestamp,
+    ensure, from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order,
+    Response, StdResult, Timestamp,
 };
 use cw2::set_contract_version;
+use osmosis_std::types::osmosis::smartaccount::v1beta1::SmartaccountQuerier;
 
-use crate::authenticator;
+use crate::authenticator::{
+    self, AuthenticatorError, CompositeAuthenticator, CompositeId, CosmwasmAuthenticatorData,
+};
 use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
-use crate::period::Period;
 use crate::price::track_denom;
-use crate::spend_limit::{SpendLimitError, Spending};
+use crate::spend_limit::{SpendLimitError, SpendLimitParams, Spending};
 use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
 use crate::ContractError;
 
@@ -82,14 +86,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::Spending {
             account,
             authenticator_id,
-            reset_period,
         } => {
             let account = deps.api.addr_validate(&account)?;
             to_json_binary(&query_spending(
                 deps,
                 account,
                 authenticator_id,
-                &reset_period,
                 env.block.time,
             )?)
         }
@@ -106,13 +108,29 @@ pub fn query_spending(
     deps: Deps,
     account: Addr,
     authenticator_id: String,
-    reset_period: &Period,
     at: Timestamp,
 ) -> Result<SpendingResponse, ContractError> {
+    let smart_account_querier = SmartaccountQuerier::new(&deps.querier);
+
+    let composite_id =
+        CompositeId::from_str(&authenticator_id).map_err(AuthenticatorError::from)?;
+
+    let response =
+        smart_account_querier.get_authenticator(account.to_string(), composite_id.root)?;
+
+    let spend_limit_auth_data = response
+        .account_authenticator
+        .unwrap() // TODO: remove unwrap
+        .child_authenticator_data::<CosmwasmAuthenticatorData>(&composite_id.path)
+        .map_err(AuthenticatorError::from)?;
+
+    let params = from_json::<SpendLimitParams>(&spend_limit_auth_data.params)?;
+    let reset_period = params.reset_period;
+
     match SPENDINGS.may_load(deps.storage, (&account, authenticator_id.as_str()))? {
         Some(spending) => Ok(SpendingResponse {
             spending: Spending {
-                value_spent_in_period: spending.get_or_reset_value_spent(reset_period, at)?,
+                value_spent_in_period: spending.get_or_reset_value_spent(&reset_period, at)?,
                 ..spending
             },
         }),
@@ -139,16 +157,23 @@ pub fn query_spendings_by_account(
 mod tests {
     use cosmwasm_std::{
         from_json,
-        testing::{mock_dependencies, mock_dependencies_with_balances, mock_env, mock_info},
-        Coin, Uint128, Uint64,
+        testing::{mock_dependencies, mock_env, mock_info},
+        to_json_vec, Coin, ContractResult, SystemError, SystemResult, Uint128, Uint64,
     };
     use osmosis_authenticators::{
         Any, AuthenticationRequest, ConfirmExecutionRequest, OnAuthenticatorAddedRequest,
         OnAuthenticatorRemovedRequest, SignModeTxData, SignatureData, TrackRequest, TxData,
     };
-    use osmosis_std::types::cosmos::bank::v1beta1::MsgSend;
+    use osmosis_std::types::{
+        cosmos::bank::v1beta1::MsgSend,
+        osmosis::smartaccount::v1beta1::{
+            AccountAuthenticator, GetAuthenticatorRequest, GetAuthenticatorResponse,
+        },
+    };
 
-    use crate::period::Period;
+    use crate::{
+        period::Period, test_helper::mock_stargate_querier::mock_dependencies_with_stargate_querier,
+    };
     use crate::{
         price::PriceResolutionConfig,
         spend_limit::{SpendLimitParams, Spending},
@@ -160,14 +185,65 @@ mod tests {
 
     #[test]
     fn test_happy_path() {
-        let mut deps = mock_dependencies_with_balances(&[
-            (&"creator".to_string(), &[Coin::new(1000, UUSDC)]),
-            (
-                &"limited_account".to_string(),
-                &[Coin::new(2_000_000, UUSDC)],
-            ),
-            (&"recipient".to_string(), &[]),
-        ]);
+        let params = SpendLimitParams {
+            limit: Uint128::from(1_000_000u128),
+            reset_period: Period::Day,
+            time_limit: None,
+        };
+
+        let params_for_querier_setup = params.clone();
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[
+                (&"creator".to_string(), &[Coin::new(1000, UUSDC)]),
+                (
+                    &"limited_account".to_string(),
+                    &[Coin::new(2_000_000, UUSDC)],
+                ),
+                (&"recipient".to_string(), &[]),
+            ],
+            Box::new(move |path: String, data: Binary| match path.as_str() {
+                "/osmosis.smartaccount.v1beta1.Query/GetAuthenticator" => {
+                    let request = match GetAuthenticatorRequest::try_from(data.clone()) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return SystemResult::Err(SystemError::InvalidRequest {
+                                error: e.to_string(),
+                                request: data,
+                            })
+                        }
+                    };
+
+                    let GetAuthenticatorRequest {
+                        account,
+                        authenticator_id,
+                    } = request;
+
+                    if account == "limited_account" && authenticator_id == 2 {
+                        let data = to_json_vec(&CosmwasmAuthenticatorData {
+                            contract: mock_env().contract.address.to_string(),
+                            params: to_json_vec(&params_for_querier_setup).unwrap(),
+                        })
+                        .unwrap();
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_json_binary(&GetAuthenticatorResponse {
+                                account_authenticator: Some(AccountAuthenticator {
+                                    id: 2,
+                                    r#type: "CosmWasmAuthenticatorV1".to_string(),
+                                    data,
+                                }),
+                            })
+                            .unwrap(),
+                        ))
+                    } else {
+                        SystemResult::Err(SystemError::InvalidRequest {
+                            error: "not found".to_string(),
+                            request: data,
+                        })
+                    }
+                }
+                _ => SystemResult::Err(SystemError::UnsupportedRequest { kind: path }),
+            }),
+        );
         let msg = InstantiateMsg {
             price_resolution_config: PriceResolutionConfig {
                 quote_denom: UUSDC.to_string(),
@@ -179,12 +255,7 @@ mod tests {
         let info = mock_info("creator", &[]);
         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        let authenticator_params = to_json_binary(&SpendLimitParams {
-            limit: Uint128::from(1_000_000u128),
-            reset_period: Period::Day,
-            time_limit: None,
-        })
-        .unwrap();
+        let authenticator_params = to_json_binary(&params).unwrap();
 
         // add authenticator
         sudo(
@@ -291,7 +362,6 @@ mod tests {
                 QueryMsg::Spending {
                     account: "limited_account".to_string(),
                     authenticator_id: "2".to_string(),
-                    reset_period: Period::Day,
                 },
             )
             .unwrap(),
@@ -352,7 +422,6 @@ mod tests {
             QueryMsg::Spending {
                 account: "limited_account".to_string(),
                 authenticator_id: "2".to_string(),
-                reset_period: Period::Day,
             },
         )
         .unwrap_err();

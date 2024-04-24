@@ -3,7 +3,6 @@
 #![cfg(all(test, not(tarpaulin)))]
 
 use cosmwasm_std::{Coin, Timestamp, Uint128};
-use osmosis_std::types::cosmos::bank::v1beta1::QueryBalanceRequest;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::{
     EstimateSwapExactAmountInRequest, EstimateSwapExactAmountInResponse,
 };
@@ -13,6 +12,7 @@ use osmosis_std::types::osmosis::{
     poolmanager::v1beta1::{MsgSwapExactAmountIn, SwapAmountInRoute},
     smartaccount::v1beta1::{MsgRemoveAuthenticator, MsgRemoveAuthenticatorResponse},
 };
+use osmosis_test_tube::osmosis_std::types::cosmos::bank::v1beta1::QueryBalanceRequest;
 use osmosis_test_tube::{
     cosmrs::proto::tendermint::v0_37::abci::ResponseDeliverTx,
     osmosis_std::types::cosmos::bank::v1beta1::MsgSend, Account, Bank, FeeSetting, Gamm, Module,
@@ -944,7 +944,6 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
-                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1061,7 +1060,6 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_2}.1"),
-                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1078,7 +1076,6 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
-                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1094,7 +1091,6 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
-                reset_period: Period::Day,
             },
         )
         .unwrap();
@@ -1150,7 +1146,6 @@ fn test_1_click_trading() {
             &QueryMsg::Spending {
                 account: account_owner.address(),
                 authenticator_id: format!("{one_click_trading_auth_id_1}.1"),
-                reset_period: Period::Day,
             },
         )
         .unwrap();

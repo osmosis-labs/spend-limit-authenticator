@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 pub use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
-use crate::{period::Period, price::PriceResolutionConfig, spend_limit::Spending};
+use crate::{price::PriceResolutionConfig, spend_limit::Spending};
 
 // re-export the structs from osmosis_authenticators
 pub use osmosis_authenticators::AuthenticatorSudoMsg as SudoMsg;
@@ -25,7 +25,6 @@ pub enum QueryMsg {
     Spending {
         account: String,
         authenticator_id: String,
-        reset_period: Period,
     },
 
     #[returns(SpendingsByAccountResponse)]

@@ -4,8 +4,6 @@ use cosmwasm_std::{from_json, StdError};
 use osmosis_std::types::osmosis::smartaccount::v1beta1::AccountAuthenticator;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::spend_limit::SpendLimitParams;
-
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -29,9 +27,9 @@ impl CompositeAuthenticatorError {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct SpendLimitCosmwasmAuthenticatorData {
+pub struct CosmwasmAuthenticatorData {
     pub contract: String,
-    pub params: SpendLimitParams,
+    pub params: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -80,13 +78,18 @@ impl CompositeAuthenticator for AccountAuthenticator {
     where
         T: DeserializeOwned,
     {
+        if path.is_empty() {
+            return from_json(self.data).map_err(CompositeAuthenticatorError::StdError);
+        }
+
         let root_sub_auths: Vec<SubAuthenticatorData> = from_json(self.data)?;
-        let sub_auths = path
-            .iter()
-            .take(path.len() - 1)
-            .try_fold(root_sub_auths, |parent, &p| {
-                from_json(parent[p].data.as_slice())
-            })?;
+        let sub_auths =
+            path.iter()
+                .take(path.len() - 1)
+                .try_fold(root_sub_auths, |parent, &p| {
+                    //TODO: return out of bounds error
+                    from_json(parent[p].data.as_slice())
+                })?;
 
         let target_idx = path
             .last()
@@ -99,7 +102,7 @@ impl CompositeAuthenticator for AccountAuthenticator {
 
 #[cfg(test)]
 mod tests {
-    use crate::period::Period;
+    use crate::{period::Period, spend_limit::SpendLimitParams};
 
     use super::*;
     use cosmwasm_std::to_json_vec;
@@ -133,13 +136,31 @@ mod tests {
 
     #[test]
     fn test_child_authenticator_data() {
-        let target_data = SpendLimitCosmwasmAuthenticatorData {
+        let params = SpendLimitParams {
+            limit: 1000000u128.into(),
+            reset_period: Period::Day,
+            time_limit: None,
+        };
+        // no depth
+        let target_data = CosmwasmAuthenticatorData {
             contract: "contract".to_string(),
-            params: SpendLimitParams {
-                limit: 1000000u128.into(),
-                reset_period: Period::Day,
-                time_limit: None,
-            },
+            params: to_json_vec(&params).unwrap(),
+        };
+        let account_auth = AccountAuthenticator {
+            data: to_json_vec(&target_data).unwrap(),
+            id: 1,
+            r#type: "AllOf".to_string(),
+        };
+
+        let result: Result<CosmwasmAuthenticatorData, CompositeAuthenticatorError> =
+            account_auth.child_authenticator_data(&[]);
+        assert_eq!(result.unwrap(), target_data);
+
+        // depth 1
+
+        let target_data = CosmwasmAuthenticatorData {
+            contract: "contract".to_string(),
+            params: to_json_vec(&params).unwrap(),
         };
         let account_auth = AccountAuthenticator {
             data: to_json_vec(&vec![
@@ -157,19 +178,15 @@ mod tests {
             r#type: "AllOf".to_string(),
         };
 
-        let result: Result<SpendLimitCosmwasmAuthenticatorData, CompositeAuthenticatorError> =
+        let result: Result<CosmwasmAuthenticatorData, CompositeAuthenticatorError> =
             account_auth.child_authenticator_data(&[1]);
         assert_eq!(result.unwrap(), target_data);
 
         // more depth
 
-        let target_data = SpendLimitCosmwasmAuthenticatorData {
+        let target_data = CosmwasmAuthenticatorData {
             contract: "contract".to_string(),
-            params: SpendLimitParams {
-                limit: 1000000u128.into(),
-                reset_period: Period::Day,
-                time_limit: None,
-            },
+            params: to_json_vec(&params).unwrap(),
         };
 
         let account_auth = AccountAuthenticator {
@@ -202,7 +219,7 @@ mod tests {
             r#type: "AllOf".to_string(),
         };
 
-        let result: Result<SpendLimitCosmwasmAuthenticatorData, CompositeAuthenticatorError> =
+        let result: Result<CosmwasmAuthenticatorData, CompositeAuthenticatorError> =
             account_auth.child_authenticator_data(&[0, 1]);
         assert_eq!(result.unwrap(), target_data);
     }
