@@ -8,12 +8,14 @@ use cosmwasm_std::{
     to_json_binary, Binary, Coin, ContractResult, CustomQuery, Empty, OwnedDeps, Querier,
     QuerierResult, QuerierWrapper, QueryRequest, SystemError, SystemResult,
 };
-use osmosis_std::types::osmosis::twap::v1beta1::{
-    ArithmeticTwapToNowRequest, ArithmeticTwapToNowResponse, TwapQuerier,
+use osmosis_std::types::osmosis::{
+    smartaccount::v1beta1::{GetAuthenticatorRequest, GetAuthenticatorResponse},
+    twap::v1beta1::{ArithmeticTwapToNowRequest, ArithmeticTwapToNowResponse, TwapQuerier},
 };
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 
 type QueryHandler = Box<dyn Fn(String, Binary) -> QuerierResult>;
+
 pub struct MockStargateQuerier<C: DeserializeOwned = Empty> {
     mock_querier: MockQuerier<C>,
     stargate_query_handler: Option<QueryHandler>,
@@ -81,9 +83,32 @@ pub fn arithmetic_twap_to_now_query_handler(
         dyn Fn(ArithmeticTwapToNowRequest) -> ContractResult<ArithmeticTwapToNowResponse>,
     >,
 ) -> QueryHandler {
+    make_query_handler(
+        "/osmosis.twap.v1beta1.Query/ArithmeticTwapToNow",
+        req_mapper,
+    )
+}
+
+pub fn get_authenticator_query_handler(
+    req_mapper: Box<dyn Fn(GetAuthenticatorRequest) -> ContractResult<GetAuthenticatorResponse>>,
+) -> QueryHandler {
+    make_query_handler(
+        "/osmosis.smartaccount.v1beta1.Query/GetAuthenticator",
+        req_mapper,
+    )
+}
+
+fn make_query_handler<Req, Res>(
+    target_path: &'static str,
+    req_mapper: Box<dyn Fn(Req) -> ContractResult<Res>>,
+) -> QueryHandler
+where
+    Req: TryFrom<Binary, Error = cosmwasm_std::StdError> + 'static,
+    Res: Serialize + 'static,
+{
     Box::new(move |path: String, data: Binary| match path.as_str() {
-        "/osmosis.twap.v1beta1.Query/ArithmeticTwapToNow" => {
-            let request = match ArithmeticTwapToNowRequest::try_from(data.clone()) {
+        p if p == target_path => {
+            let request = match Req::try_from(data.clone()) {
                 Ok(v) => v,
                 Err(e) => {
                     return SystemResult::Err(SystemError::InvalidRequest {

@@ -194,7 +194,10 @@ mod tests {
     };
 
     use crate::{
-        period::Period, test_helper::mock_stargate_querier::mock_dependencies_with_stargate_querier,
+        period::Period,
+        test_helper::mock_stargate_querier::{
+            get_authenticator_query_handler, mock_dependencies_with_stargate_querier,
+        },
     };
     use crate::{
         price::PriceResolutionConfig,
@@ -223,48 +226,24 @@ mod tests {
                 ),
                 (&"recipient".to_string(), &[]),
             ],
-            Box::new(move |path: String, data: Binary| match path.as_str() {
-                "/osmosis.smartaccount.v1beta1.Query/GetAuthenticator" => {
-                    let request = match GetAuthenticatorRequest::try_from(data.clone()) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            return SystemResult::Err(SystemError::InvalidRequest {
-                                error: e.to_string(),
-                                request: data,
-                            })
-                        }
-                    };
-
-                    let GetAuthenticatorRequest {
-                        account,
-                        authenticator_id,
-                    } = request;
-
-                    if account == "limited_account" && authenticator_id == 2 {
-                        let data = to_json_vec(&CosmwasmAuthenticatorData {
-                            contract: mock_env().contract.address.to_string(),
-                            params: to_json_vec(&params_for_querier_setup).unwrap(),
-                        })
-                        .unwrap();
-                        SystemResult::Ok(ContractResult::Ok(
-                            to_json_binary(&GetAuthenticatorResponse {
-                                account_authenticator: Some(AccountAuthenticator {
-                                    id: 2,
-                                    r#type: "CosmWasmAuthenticatorV1".to_string(),
-                                    data,
-                                }),
+            get_authenticator_query_handler(Box::new(move |req| {
+                let account = req.account.as_str();
+                let authenticator_id = req.authenticator_id;
+                match (account, authenticator_id) {
+                    ("limited_account", 2) => ContractResult::Ok(GetAuthenticatorResponse {
+                        account_authenticator: Some(AccountAuthenticator {
+                            id: 2,
+                            r#type: "CosmWasmAuthenticatorV1".to_string(),
+                            data: to_json_vec(&CosmwasmAuthenticatorData {
+                                contract: mock_env().contract.address.to_string(),
+                                params: to_json_vec(&params_for_querier_setup).unwrap(),
                             })
                             .unwrap(),
-                        ))
-                    } else {
-                        SystemResult::Err(SystemError::InvalidRequest {
-                            error: "not found".to_string(),
-                            request: data,
-                        })
-                    }
+                        }),
+                    }),
+                    _ => ContractResult::Err("not found".to_string()),
                 }
-                _ => SystemResult::Err(SystemError::UnsupportedRequest { kind: path }),
-            }),
+            })),
         );
         let msg = InstantiateMsg {
             price_resolution_config: PriceResolutionConfig {
