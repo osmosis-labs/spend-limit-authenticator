@@ -4,7 +4,7 @@ use std::str::FromStr;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     ensure, from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order,
-    Response, StdError, StdResult, Timestamp,
+    Response, StdError, Timestamp,
 };
 use cw2::set_contract_version;
 use osmosis_std::types::osmosis::smartaccount::v1beta1::SmartaccountQuerier;
@@ -97,7 +97,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         }
         QueryMsg::SpendingsByAccount { account } => {
             let account = deps.api.addr_validate(&account)?;
-            to_json_binary(&query_spendings_by_account(deps, account)?)
+            to_json_binary(&query_spendings_by_account(deps, account, env.block.time)?)
         }
     }
     .map_err(ContractError::from)
@@ -124,11 +124,17 @@ pub fn query_spending(
 pub fn query_spendings_by_account(
     deps: Deps,
     account: Addr,
+    at: Timestamp,
 ) -> Result<SpendingsByAccountResponse, ContractError> {
     let spendings = SPENDINGS
         .prefix(&account)
         .range(deps.storage, None, None, Order::Ascending)
-        .collect::<StdResult<Vec<_>>>()?;
+        .map(|item| {
+            let (authenticator_id, spending) = item?;
+            let spending = updated_spending(deps, &account, &authenticator_id, at, spending)?;
+            Ok((authenticator_id, spending))
+        })
+        .collect::<Result<Vec<_>, ContractError>>()?;
     Ok(SpendingsByAccountResponse { spendings })
 }
 
@@ -177,10 +183,12 @@ fn updated_spending(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use cosmwasm_std::{
         from_json,
         testing::{mock_dependencies, mock_env, mock_info},
-        to_json_vec, Coin, ContractResult, SystemError, SystemResult, Uint128, Uint64,
+        to_json_vec, BlockInfo, Coin, ContractResult, Uint128, Uint64,
     };
     use osmosis_authenticators::{
         Any, AuthenticationRequest, ConfirmExecutionRequest, OnAuthenticatorAddedRequest,
@@ -188,15 +196,16 @@ mod tests {
     };
     use osmosis_std::types::{
         cosmos::bank::v1beta1::MsgSend,
-        osmosis::smartaccount::v1beta1::{
-            AccountAuthenticator, GetAuthenticatorRequest, GetAuthenticatorResponse,
-        },
+        osmosis::smartaccount::v1beta1::{AccountAuthenticator, GetAuthenticatorResponse},
     };
 
     use crate::{
         period::Period,
-        test_helper::mock_stargate_querier::{
-            get_authenticator_query_handler, mock_dependencies_with_stargate_querier,
+        test_helper::{
+            authenticator_setup::SubAuthenticatorData,
+            mock_stargate_querier::{
+                get_authenticator_query_handler, mock_dependencies_with_stargate_querier,
+            },
         },
     };
     use crate::{
@@ -471,5 +480,278 @@ mod tests {
             }
             .into()
         );
+    }
+
+    #[test]
+    fn test_query_spendings() {
+        let params_map: BTreeMap<(&str, &str), SpendLimitParams> = vec![
+            (
+                ("addr_a", "1"),
+                SpendLimitParams {
+                    limit: Uint128::from(1_000_000u128),
+                    reset_period: Period::Day,
+                    time_limit: None,
+                },
+            ),
+            (
+                ("addr_a", "2.1.0"),
+                SpendLimitParams {
+                    limit: Uint128::from(2_000_000u128),
+                    reset_period: Period::Week,
+                    time_limit: None,
+                },
+            ),
+            (
+                ("addr_b", "66"),
+                SpendLimitParams {
+                    limit: Uint128::from(1_000_000u128),
+                    reset_period: Period::Month,
+                    time_limit: None,
+                },
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let params_for_querier_setup = params_map.clone();
+
+        // setup query handler
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[],
+            get_authenticator_query_handler(Box::new(move |req| {
+                let account = req.account.as_str();
+                let authenticator_id = req.authenticator_id;
+                match (account, authenticator_id) {
+                    ("addr_a", 1) => ContractResult::Ok(GetAuthenticatorResponse {
+                        account_authenticator: Some(AccountAuthenticator {
+                            id: 2,
+                            r#type: "CosmWasmAuthenticatorV1".to_string(),
+                            data: to_json_vec(&CosmwasmAuthenticatorData {
+                                contract: mock_env().contract.address.to_string(),
+                                params: to_json_vec(&params_for_querier_setup[&("addr_a", "1")])
+                                    .unwrap(),
+                            })
+                            .unwrap(),
+                        }),
+                    }),
+                    ("addr_a", 2) => ContractResult::Ok(GetAuthenticatorResponse {
+                        account_authenticator: Some(AccountAuthenticator {
+                            id: 2,
+                            r#type: "AnyOf".to_string(),
+                            data: to_json_vec(&[
+                                SubAuthenticatorData {
+                                    authenticator_type: "Dummy".to_string(),
+                                    data: vec![],
+                                },
+                                SubAuthenticatorData {
+                                    authenticator_type: "AllOf".to_string(),
+                                    data: to_json_vec(&[SubAuthenticatorData {
+                                        authenticator_type: "CosmWasmAuthenticatorV1".to_string(),
+                                        data: to_json_vec(&CosmwasmAuthenticatorData {
+                                            contract: mock_env().contract.address.to_string(),
+                                            params: to_json_vec(
+                                                &params_for_querier_setup[&("addr_a", "2.1.0")],
+                                            )
+                                            .unwrap(),
+                                        })
+                                        .unwrap(),
+                                    }])
+                                    .unwrap(),
+                                },
+                            ])
+                            .unwrap(),
+                        }),
+                    }),
+                    ("addr_b", 66) => ContractResult::Ok(GetAuthenticatorResponse {
+                        account_authenticator: Some(AccountAuthenticator {
+                            id: 2,
+                            r#type: "CosmWasmAuthenticatorV1".to_string(),
+                            data: to_json_vec(&CosmwasmAuthenticatorData {
+                                contract: mock_env().contract.address.to_string(),
+                                params: to_json_vec(&params_for_querier_setup[&("addr_b", "66")])
+                                    .unwrap(),
+                            })
+                            .unwrap(),
+                        }),
+                    }),
+                    _ => ContractResult::Err("not found".to_string()),
+                }
+            })),
+        );
+
+        // setup states that correspond to the query hanlders
+        let mock_spending = Spending {
+            value_spent_in_period: 999_999u128.into(),
+            last_spent_at: mock_env().block.time,
+        };
+        for ((account, authenticator_id), _) in params_map {
+            SPENDINGS
+                .save(
+                    &mut deps.storage,
+                    (&Addr::unchecked(account), authenticator_id),
+                    &mock_spending,
+                )
+                .unwrap();
+        }
+
+        // test query with both single and per account
+
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::Spending {
+                    account: "addr_a".to_string(),
+                    authenticator_id: "1".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, mock_spending);
+
+        // test reset
+        // after 1 day "a, 1" reset
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(1),
+                QueryMsg::Spending {
+                    account: "addr_a".to_string(),
+                    authenticator_id: "1".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let reset_spending = Spending {
+            value_spent_in_period: 0u128.into(),
+            last_spent_at: mock_env().block.time,
+        };
+
+        assert_eq!(spending, reset_spending,);
+
+        // "a, 2.1.0" not reset
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(1),
+                QueryMsg::Spending {
+                    account: "addr_a".to_string(),
+                    authenticator_id: "2.1.0".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, mock_spending);
+
+        // add a week in
+        // after 1 week "a, 2.1.0" reset
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(7),
+                QueryMsg::Spending {
+                    account: "addr_a".to_string(),
+                    authenticator_id: "2.1.0".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, reset_spending);
+
+        // "b, 66" not reset
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(7),
+                QueryMsg::Spending {
+                    account: "addr_b".to_string(),
+                    authenticator_id: "66".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, mock_spending);
+
+        // add a month in
+        // after 1 month "b, 66" reset
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(30),
+                QueryMsg::Spending {
+                    account: "addr_b".to_string(),
+                    authenticator_id: "66".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, reset_spending);
+
+        // query for account
+        let SpendingsByAccountResponse { spendings } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::SpendingsByAccount {
+                    account: "addr_a".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            spendings,
+            vec![
+                ("1".to_string(), mock_spending.clone()),
+                ("2.1.0".to_string(), mock_spending.clone())
+            ]
+        );
+
+        // add day in
+        // after 1 day "a, 1" reset
+        let SpendingsByAccountResponse { spendings } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(1),
+                QueryMsg::SpendingsByAccount {
+                    account: "addr_a".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            spendings,
+            vec![
+                ("1".to_string(), reset_spending.clone()),
+                ("2.1.0".to_string(), mock_spending.clone())
+            ]
+        );
+    }
+
+    fn mock_env_with_additional_days(days: u64) -> Env {
+        Env {
+            block: BlockInfo {
+                height: mock_env().block.height + days * 10000,
+                time: mock_env().block.time.plus_days(days),
+                chain_id: mock_env().block.chain_id,
+            },
+            transaction: mock_env().transaction,
+            contract: mock_env().contract,
+        }
     }
 }
