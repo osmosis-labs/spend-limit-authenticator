@@ -1,10 +1,15 @@
 use cosmwasm_std::{Addr, StdError};
 use thiserror::Error;
 
+use super::composite::CompositeAuthenticatorError;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum AuthenticatorError {
     #[error("{0}")]
     StdError(#[from] StdError),
+
+    #[error("{0}")]
+    CompositeAuthenticatorError(#[from] CompositeAuthenticatorError),
 
     #[error("Missing authenticator params")]
     MissingAuthenticatorParams,

@@ -31,6 +31,10 @@ impl<C: DeserializeOwned> MockStargateQuerier<C> {
         self.stargate_query_handler = Some(handler);
         self
     }
+
+    pub fn update_balance(&mut self, addr: impl Into<String>, balance: Vec<Coin>) {
+        self.mock_querier.update_balance(addr, balance);
+    }
 }
 
 impl<C: CustomQuery + DeserializeOwned> Querier for MockStargateQuerier<C> {

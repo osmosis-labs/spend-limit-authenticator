@@ -1,8 +1,8 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::authenticator::common::{get_account_spending_fee, try_spend_all};
-use crate::spend_limit::{calculate_spent_coins, SpendLimitParams};
+use crate::authenticator::common::{get_account_spending_fee, update_and_check_spend_limit};
+use crate::spend_limit::{calculate_received_coins, calculate_spent_coins, SpendLimitParams};
 use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 
@@ -33,7 +33,7 @@ pub fn confirm_execution(
 
     let pre_exec_balances = pre_exec_balances.try_into()?;
     let post_exec_balances = post_exec_balances.try_into()?;
-    let mut spent_coins = calculate_spent_coins(pre_exec_balances, post_exec_balances)?;
+    let mut spent_coins = calculate_spent_coins(&pre_exec_balances, &post_exec_balances)?;
 
     // Get recent untracked spent fee, the latest fee is already captured in the balance difference, so we need to subtract it
     let untracked_spent_fee = UNTRACKED_SPENT_FEES
@@ -41,28 +41,31 @@ pub fn confirm_execution(
         .unwrap_or_default()
         .fee;
 
-    // add all untracked spent fees to the spent coins. 
-    // These are fees that have been deducted on previous failed tx, but still 
+    // add all untracked spent fees to the spent coins.
+    // These are fees that have been deducted on previous failed tx, but still
     // not counted on the spend limit. We add them here.
-    for coin in untracked_spent_fee {
-        spent_coins.add(coin)?;
+    for fee in untracked_spent_fee {
+        spent_coins.add(fee)?;
     }
 
-    // To avoid double counting, we subtract the account spending fee from the spent coins. 
+    // To avoid double counting, we subtract the account spending fee from the spent coins.
     // This is the fee for the current transaction and thus already captured by the difference in balances.
     let account_spending_fee =
         get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);
-    for coin in account_spending_fee {
-        spent_coins.sub(coin)?;
+    for fee in account_spending_fee {
+        spent_coins.sub(fee)?;
     }
 
-    let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
+    let received_coins = calculate_received_coins(&pre_exec_balances, &post_exec_balances)?;
 
+    let mut spending = SPENDINGS.load(deps.storage, spend_limit_key)?;
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
-    try_spend_all(
+
+    update_and_check_spend_limit(
         deps.branch(),
         &mut spending,
         spent_coins,
+        received_coins,
         &conf,
         params.limit,
         &params.reset_period,

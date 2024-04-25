@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use cosmwasm_std::to_json_binary;
-use osmosis_std::types::osmosis::authenticator::{
+use osmosis_std::types::osmosis::smartaccount::v1beta1::{
     MsgAddAuthenticator, MsgAddAuthenticatorResponse,
 };
 use osmosis_test_tube::{Account, OsmosisTestApp, Runner, SigningAccount, Wasm};
@@ -188,7 +188,7 @@ where
         e.ty == "message"
             && e.attributes
                 .iter()
-                .any(|a| a.key == "module" && a.value == "authenticator")
+                .any(|a| a.key == "module" && a.value == "smartaccount")
     })
     .unwrap()
     .attributes

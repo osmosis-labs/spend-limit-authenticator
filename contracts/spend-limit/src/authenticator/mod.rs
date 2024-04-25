@@ -1,11 +1,16 @@
 mod common;
+mod composite;
 mod error;
 mod handler;
 
 use handler::*;
 
 pub use {
-    authenticate::authenticate, confirm_execution::confirm_execution, error::AuthenticatorError,
+    authenticate::authenticate,
+    composite::{CompositeAuthenticator, CompositeId, CosmwasmAuthenticatorData},
+    confirm_execution::confirm_execution,
+    error::AuthenticatorError,
     on_authenticator_added::on_authenticator_added,
-    on_authenticator_removed::on_authenticator_removed, track::track,
+    on_authenticator_removed::on_authenticator_removed,
+    track::track,
 };

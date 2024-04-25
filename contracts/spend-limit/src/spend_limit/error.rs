@@ -20,18 +20,15 @@ pub enum SpendLimitError {
     #[error("Accumulating spent value error: {0}")]
     AccumulatingSpentValueError(#[from] OverflowError),
 
-    #[error("Overspend: remaining quota {remaining}, requested {requested}")]
-    Overspend {
-        remaining: Uint128,
-        requested: Uint128,
-    },
+    #[error("Overspend: {spent} has been spent but limit is {limit}")]
+    Overspend { limit: Uint128, spent: Uint128 },
 }
 
 impl SpendLimitError {
-    pub fn overspend(remaining: u128, requested: u128) -> Self {
+    pub fn overspend(limit: u128, spent: u128) -> Self {
         Self::Overspend {
-            remaining: Uint128::from(remaining),
-            requested: Uint128::from(requested),
+            limit: Uint128::from(limit),
+            spent: Uint128::from(spent),
         }
     }
 }

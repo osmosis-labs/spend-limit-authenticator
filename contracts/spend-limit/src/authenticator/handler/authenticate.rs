@@ -1,8 +1,8 @@
-use cosmwasm_std::{DepsMut, Env, Response, Timestamp};
+use cosmwasm_std::{Coins, DepsMut, Env, Response, Timestamp};
 use osmosis_authenticators::AuthenticationRequest;
 
 use crate::{
-    authenticator::common::{get_account_spending_fee, try_spend_all},
+    authenticator::common::{get_account_spending_fee, update_and_check_spend_limit},
     state::{PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES},
     ContractError,
 };
@@ -53,15 +53,21 @@ pub fn authenticate(
     // check whether the fee spent + about to spend is within the limit
     // this will not be committed to the state
     let coins = vec![untracked_spent_fee, account_spending_fee].concat();
-    try_spend_all(
+    update_and_check_spend_limit(
         deps,
         &mut spending,
         coins,
+        Coins::default(),
         &conf,
         params.limit,
         &params.reset_period,
         env.block.time,
     )?;
+
+    // TODO: Better error that tells the fact that overspending comes from untracked spent fee
+    // - error spend limit is over from the previously failed transaction `UntrackedSpentFee`
+    // - error spend limit is over from the fee `CurrentFee`
+    // - else: `AfterTransaction`
 
     Ok(Response::new().add_attribute("action", "authenticate"))
 }
@@ -194,7 +200,7 @@ mod tests {
     #[case::fee_spent_to_the_limit("account", None, vec![Coin::new(666_666_666, "uosmo")], vec![], Ok(()))]
     #[case::fee_spent_to_the_limit_with_untracked_denoms("account", None,
         vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_000, "untracked1")],
-        vec![Coin::new(500_000_001, "uusdc"), Coin::new(500_000_000, "untracked2")],
+        vec![Coin::new(500_000_000, "uusdc"), Coin::new(500_000_000, "untracked2")],
         Ok(()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
@@ -213,14 +219,14 @@ mod tests {
         Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
-        vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_002, "uusdc")],
+        vec![Coin::new(333_333_333, "uosmo"), Coin::new(500_000_001, "uusdc")],
         vec![],
-        Err(SpendLimitError::overspend(500_000_001, 500_000_002).into()))
+        Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit("account", None,
         vec![Coin::new(333_333_333, "uosmo")],
-        vec![Coin::new(500_000_002, "uusdc")],
-        Err(SpendLimitError::overspend(499_999_998, 499_999_999).into()))
+        vec![Coin::new(500_000_001, "uusdc")],
+        Err(SpendLimitError::overspend(1_000_000_000, 1_000_000_001).into()))
     ]
     #[case::fee_spent_over_the_limit_by_fee_grant("account", Some("granter"),
         vec![Coin::new(1_000_000_001, "uusdc")],
