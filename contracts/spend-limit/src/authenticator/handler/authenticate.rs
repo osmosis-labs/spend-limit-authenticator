@@ -66,11 +66,6 @@ pub fn authenticate(
         env.block.time,
     )?;
 
-    // TODO: Better error that tells the fact that overspending comes from untracked spent fee
-    // - error spend limit is over from the previously failed transaction `UntrackedSpentFee`
-    // - error spend limit is over from the fee `CurrentFee`
-    // - else: `AfterTransaction`
-
     Ok(Response::new().add_attribute("action", "authenticate"))
 }
 
