@@ -31,6 +31,24 @@ pub fn get_and_cache_price(
     block_time: Timestamp,
     denom: &str,
 ) -> Result<Option<PriceInfo>, PriceError> {
+    if let Some(price_info) = get_price(price_info_store, deps.as_ref(), conf, block_time, denom)? {
+        price_info_store
+            .save(deps.storage, denom, &price_info)
+            .map_err(PriceError::StdError)?;
+
+        return Ok(Some(price_info));
+    };
+
+    Ok(None)
+}
+
+pub fn get_price(
+    price_info_store: &PriceInfoStore,
+    deps: Deps,
+    conf: &PriceResolutionConfig,
+    block_time: Timestamp,
+    denom: &str,
+) -> Result<Option<PriceInfo>, PriceError> {
     // if denom is quote denom, return 1
     if denom == conf.quote_denom.as_str() {
         return Ok(Some(PriceInfo {
@@ -51,14 +69,7 @@ pub fn get_and_cache_price(
     }
 
     // else fetch the new price and cache it
-    let price_info = fetch_twap_price(
-        deps.as_ref(),
-        conf,
-        denom,
-        block_time,
-        price_info.swap_routes,
-    )?;
-    price_info_store.save(deps.storage, denom, &price_info)?;
+    let price_info = fetch_twap_price(deps, conf, denom, block_time, price_info.swap_routes)?;
 
     Ok(Some(price_info))
 }

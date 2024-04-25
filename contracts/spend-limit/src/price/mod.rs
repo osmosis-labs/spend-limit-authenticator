@@ -6,4 +6,4 @@ mod price_info_store;
 pub use config::PriceResolutionConfig;
 pub use error::PriceError;
 pub use price_info::PriceInfo;
-pub use price_info_store::{get_and_cache_price, track_denom, PriceInfoStore};
+pub use price_info_store::{get_and_cache_price, get_price, track_denom, PriceInfoStore};

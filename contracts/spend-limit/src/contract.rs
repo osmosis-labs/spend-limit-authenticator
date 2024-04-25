@@ -13,9 +13,9 @@ use crate::authenticator::{
     self, AuthenticatorError, CompositeAuthenticator, CompositeId, CosmwasmAuthenticatorData,
 };
 use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
-use crate::price::track_denom;
+use crate::price::{get_price, track_denom};
 use crate::spend_limit::{SpendLimitError, SpendLimitParams, Spending};
-use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS};
+use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 
 const CONTRACT_NAME: &str = "crates.io:spend-limit";
@@ -174,13 +174,46 @@ fn updated_spending(
     spending: Spending,
 ) -> Result<Spending, ContractError> {
     let params = get_spend_limit_params(deps, &account, &authenticator_id)?;
-    // TODO: add untracked spent fees
+    let mut value_spent_in_period = spending.get_or_reset_value_spent(&params.reset_period, at)?;
+
+    // add untracked spent fee as part of value spent
+    let untracked_spent_fee = UNTRACKED_SPENT_FEES
+        .may_load(deps.storage, (account, authenticator_id))?
+        .unwrap_or_default();
+
+    let last_spent_at = spending.last_spent_at.max(untracked_spent_fee.updated_at);
+
+    let accumulated_fee = untracked_spent_fee.get_or_reset_accum_fee(&params.reset_period, at)?;
+
+    let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
+
+    for fee in accumulated_fee {
+        if let Some(price) = get_price(&PRICE_INFOS, deps, &conf, at, &fee.denom)? {
+            let fee_spent = fee
+                .amount
+                .checked_mul_ceil(price.price)
+                .map_err(std_err_from_checked_mul_frac)?;
+
+            value_spent_in_period = value_spent_in_period
+                .checked_add(fee_spent)
+                .map_err(StdError::overflow)?;
+        };
+    }
+
     Ok(Spending {
-        value_spent_in_period: spending.get_or_reset_value_spent(&params.reset_period, at)?,
-        ..spending
+        value_spent_in_period,
+        last_spent_at,
     })
 }
-
+fn std_err_from_checked_mul_frac(e: cosmwasm_std::CheckedMultiplyFractionError) -> StdError {
+    match e {
+        cosmwasm_std::CheckedMultiplyFractionError::DivideByZero(e) => StdError::divide_by_zero(e),
+        cosmwasm_std::CheckedMultiplyFractionError::ConversionOverflow(e) => {
+            StdError::ConversionOverflow { source: e }
+        }
+        cosmwasm_std::CheckedMultiplyFractionError::Overflow(e) => StdError::overflow(e),
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -200,6 +233,7 @@ mod tests {
     };
 
     use crate::{
+        fee::UntrackedSpentFee,
         period::Period,
         test_helper::{
             authenticator_setup::SubAuthenticatorData,
@@ -579,6 +613,17 @@ mod tests {
             })),
         );
 
+        PRICE_RESOLUTION_CONFIG
+            .save(
+                &mut deps.storage,
+                &PriceResolutionConfig {
+                    quote_denom: "uosmo".to_string(),
+                    staleness_threshold: Uint64::from(3_600_000_000u64),
+                    twap_duration: Uint64::from(3_600_000_000u64),
+                },
+            )
+            .unwrap();
+
         // setup states that correspond to the query hanlders
         let mock_spending = Spending {
             value_spent_in_period: 999_999u128.into(),
@@ -741,6 +786,69 @@ mod tests {
                 ("2.1.0".to_string(), mock_spending.clone())
             ]
         );
+
+        // add untracked spent fees to "a"
+
+        let fee = vec![Coin::new(100, "uosmo")];
+
+        UNTRACKED_SPENT_FEES
+            .save(
+                &mut deps.storage,
+                (&Addr::unchecked("addr_a"), "1"),
+                &UntrackedSpentFee {
+                    fee: fee.clone(),
+                    updated_at: mock_env().block.time,
+                },
+            )
+            .unwrap();
+
+        UNTRACKED_SPENT_FEES
+            .save(
+                &mut deps.storage,
+                (&Addr::unchecked("addr_a"), "2.1.0"),
+                &UntrackedSpentFee {
+                    fee,
+                    updated_at: mock_env().block.time,
+                },
+            )
+            .unwrap();
+
+        let mock_spending_with_fee = Spending {
+            value_spent_in_period: mock_spending.value_spent_in_period + Uint128::from(100u128),
+            last_spent_at: mock_env().block.time,
+        };
+
+        // query spending
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::Spending {
+                    account: "addr_a".to_string(),
+                    authenticator_id: "1".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, mock_spending_with_fee);
+
+        // reset after a day in
+        let SpendingResponse { spending } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env_with_additional_days(1),
+                QueryMsg::Spending {
+                    account: "addr_a".to_string(),
+                    authenticator_id: "1".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(spending, reset_spending);
     }
 
     fn mock_env_with_additional_days(days: u64) -> Env {

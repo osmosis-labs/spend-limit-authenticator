@@ -267,6 +267,8 @@ fn test_fee_draining() {
         SpendLimitError::overspend(1500000, 1500001).to_string()
     );
 
+    let latest_exec = app.get_block_time_nanos();
+
     // check that fee has been deducted
     let acc_1_balance = bank
         .query_balance(&QueryBalanceRequest {
@@ -284,7 +286,13 @@ fn test_fee_draining() {
         spend_limit_querier
             .query_spendings_by_account(acc_1_custom_fee.address())
             .unwrap(),
-        vec![("1".to_string(), Spending::default())]
+        vec![(
+            "1".to_string(),
+            Spending {
+                value_spent_in_period: 1500000u128.into(),
+                last_spent_at: Timestamp::from_nanos(latest_exec as u64)
+            }
+        )]
     );
 
     // spend some more
@@ -1080,7 +1088,7 @@ fn test_1_click_trading() {
         )
         .unwrap();
 
-    assert_eq!(spending.value_spent_in_period.u128(), s1_spent);
+    assert_eq!(spending.value_spent_in_period.u128(), limit);
 
     // increases time for 2 days
     app.increase_time(24 * 60 * 60 * 2);
