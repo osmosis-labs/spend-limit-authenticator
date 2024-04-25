@@ -103,39 +103,15 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     .map_err(ContractError::from)
 }
 
-// TODO: add untracked spent fee
 pub fn query_spending(
     deps: Deps,
     account: Addr,
     authenticator_id: String,
     at: Timestamp,
 ) -> Result<SpendingResponse, ContractError> {
-    let smart_account_querier = SmartaccountQuerier::new(&deps.querier);
-
-    let composite_id =
-        CompositeId::from_str(&authenticator_id).map_err(AuthenticatorError::from)?;
-
-    let response =
-        smart_account_querier.get_authenticator(account.to_string(), composite_id.root)?;
-
-    let spend_limit_auth_data = response
-        .account_authenticator
-        .ok_or(StdError::not_found(&format!(
-            "Authenticator with account = {}, authenticator_id = {}",
-            account, authenticator_id
-        )))?
-        .child_authenticator_data::<CosmwasmAuthenticatorData>(&composite_id.path)
-        .map_err(AuthenticatorError::from)?;
-
-    let params = from_json::<SpendLimitParams>(&spend_limit_auth_data.params)?;
-    let reset_period = params.reset_period;
-
     match SPENDINGS.may_load(deps.storage, (&account, authenticator_id.as_str()))? {
         Some(spending) => Ok(SpendingResponse {
-            spending: Spending {
-                value_spent_in_period: spending.get_or_reset_value_spent(&reset_period, at)?,
-                ..spending
-            },
+            spending: updated_spending(deps, &account, &authenticator_id, at, spending)?,
         }),
         None => Err(SpendLimitError::SpendLimitNotFound {
             address: account,
@@ -154,6 +130,49 @@ pub fn query_spendings_by_account(
         .range(deps.storage, None, None, Order::Ascending)
         .collect::<StdResult<Vec<_>>>()?;
     Ok(SpendingsByAccountResponse { spendings })
+}
+
+/// Get spend limit params from the authenticator data
+/// This supports getting params from composite authenticator
+fn get_spend_limit_params(
+    deps: Deps,
+    account: &Addr,
+    authenticator_id: &str,
+) -> Result<SpendLimitParams, ContractError> {
+    let smart_account_querier = SmartaccountQuerier::new(&deps.querier);
+
+    let composite_id =
+        CompositeId::from_str(&authenticator_id).map_err(AuthenticatorError::from)?;
+
+    let response =
+        smart_account_querier.get_authenticator(account.to_string(), composite_id.root)?;
+
+    let spend_limit_auth_data = response
+        .account_authenticator
+        .ok_or(StdError::not_found(&format!(
+            "Authenticator with account = {}, authenticator_id = {}",
+            account, authenticator_id
+        )))?
+        .child_authenticator_data::<CosmwasmAuthenticatorData>(&composite_id.path)
+        .map_err(AuthenticatorError::from)?;
+
+    from_json::<SpendLimitParams>(&spend_limit_auth_data.params).map_err(ContractError::from)
+}
+
+/// Update stored spending with updated information such as reset period, untracked spent fee
+fn updated_spending(
+    deps: Deps,
+    account: &Addr,
+    authenticator_id: &str,
+    at: Timestamp,
+    spending: Spending,
+) -> Result<Spending, ContractError> {
+    let params = get_spend_limit_params(deps, &account, &authenticator_id)?;
+    // TODO: add untracked spent fees
+    Ok(Spending {
+        value_spent_in_period: spending.get_or_reset_value_spent(&params.reset_period, at)?,
+        ..spending
+    })
 }
 
 #[cfg(test)]
