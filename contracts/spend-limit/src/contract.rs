@@ -1,22 +1,16 @@
-use std::str::FromStr;
-
+use crate::authenticator::{self};
+use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
+use crate::price::track_denom;
+use crate::spend_limit::{updated_spending, SpendLimitError};
+use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
+use crate::ContractError;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure, from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order,
-    Response, StdError, Timestamp,
+    ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    Timestamp,
 };
 use cw2::set_contract_version;
-use osmosis_std::types::osmosis::smartaccount::v1beta1::SmartaccountQuerier;
-
-use crate::authenticator::{
-    self, AuthenticatorError, CompositeAuthenticator, CompositeId, CosmwasmAuthenticatorData,
-};
-use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
-use crate::price::{get_price, track_denom};
-use crate::spend_limit::{SpendLimitError, SpendLimitParams, Spending};
-use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
-use crate::ContractError;
 
 const CONTRACT_NAME: &str = "crates.io:spend-limit";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -111,7 +105,16 @@ pub fn query_spending(
 ) -> Result<SpendingResponse, ContractError> {
     match SPENDINGS.may_load(deps.storage, (&account, authenticator_id.as_str()))? {
         Some(spending) => Ok(SpendingResponse {
-            spending: updated_spending(deps, &account, &authenticator_id, at, spending)?,
+            spending: updated_spending(
+                deps,
+                &PRICE_INFOS,
+                &UNTRACKED_SPENT_FEES,
+                &PRICE_RESOLUTION_CONFIG.load(deps.storage)?,
+                &account,
+                &authenticator_id,
+                at,
+                spending,
+            )?,
         }),
         None => Err(SpendLimitError::SpendLimitNotFound {
             address: account,
@@ -131,89 +134,23 @@ pub fn query_spendings_by_account(
         .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
             let (authenticator_id, spending) = item?;
-            let spending = updated_spending(deps, &account, &authenticator_id, at, spending)?;
+            let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
+            let spending = updated_spending(
+                deps,
+                &PRICE_INFOS,
+                &UNTRACKED_SPENT_FEES,
+                &conf,
+                &account,
+                &authenticator_id,
+                at,
+                spending,
+            )?;
             Ok((authenticator_id, spending))
         })
         .collect::<Result<Vec<_>, ContractError>>()?;
     Ok(SpendingsByAccountResponse { spendings })
 }
 
-/// Get spend limit params from the authenticator data
-/// This supports getting params from composite authenticator
-fn get_spend_limit_params(
-    deps: Deps,
-    account: &Addr,
-    authenticator_id: &str,
-) -> Result<SpendLimitParams, ContractError> {
-    let smart_account_querier = SmartaccountQuerier::new(&deps.querier);
-
-    let composite_id =
-        CompositeId::from_str(&authenticator_id).map_err(AuthenticatorError::from)?;
-
-    let response =
-        smart_account_querier.get_authenticator(account.to_string(), composite_id.root)?;
-
-    let spend_limit_auth_data = response
-        .account_authenticator
-        .ok_or(StdError::not_found(&format!(
-            "Authenticator with account = {}, authenticator_id = {}",
-            account, authenticator_id
-        )))?
-        .child_authenticator_data::<CosmwasmAuthenticatorData>(&composite_id.path)
-        .map_err(AuthenticatorError::from)?;
-
-    from_json::<SpendLimitParams>(&spend_limit_auth_data.params).map_err(ContractError::from)
-}
-
-/// Update stored spending with updated information such as reset period, untracked spent fee
-fn updated_spending(
-    deps: Deps,
-    account: &Addr,
-    authenticator_id: &str,
-    at: Timestamp,
-    spending: Spending,
-) -> Result<Spending, ContractError> {
-    let params = get_spend_limit_params(deps, &account, &authenticator_id)?;
-    let mut value_spent_in_period = spending.get_or_reset_value_spent(&params.reset_period, at)?;
-
-    // add untracked spent fee as part of value spent
-    let untracked_spent_fee = UNTRACKED_SPENT_FEES
-        .may_load(deps.storage, (account, authenticator_id))?
-        .unwrap_or_default();
-
-    let last_spent_at = spending.last_spent_at.max(untracked_spent_fee.updated_at);
-
-    let accumulated_fee = untracked_spent_fee.get_or_reset_accum_fee(&params.reset_period, at)?;
-
-    let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
-
-    for fee in accumulated_fee {
-        if let Some(price) = get_price(&PRICE_INFOS, deps, &conf, at, &fee.denom)? {
-            let fee_spent = fee
-                .amount
-                .checked_mul_ceil(price.price)
-                .map_err(std_err_from_checked_mul_frac)?;
-
-            value_spent_in_period = value_spent_in_period
-                .checked_add(fee_spent)
-                .map_err(StdError::overflow)?;
-        };
-    }
-
-    Ok(Spending {
-        value_spent_in_period,
-        last_spent_at,
-    })
-}
-fn std_err_from_checked_mul_frac(e: cosmwasm_std::CheckedMultiplyFractionError) -> StdError {
-    match e {
-        cosmwasm_std::CheckedMultiplyFractionError::DivideByZero(e) => StdError::divide_by_zero(e),
-        cosmwasm_std::CheckedMultiplyFractionError::ConversionOverflow(e) => {
-            StdError::ConversionOverflow { source: e }
-        }
-        cosmwasm_std::CheckedMultiplyFractionError::Overflow(e) => StdError::overflow(e),
-    }
-}
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -233,8 +170,10 @@ mod tests {
     };
 
     use crate::{
+        authenticator::CosmwasmAuthenticatorData,
         fee::UntrackedSpentFee,
         period::Period,
+        state::UNTRACKED_SPENT_FEES,
         test_helper::{
             authenticator_setup::SubAuthenticatorData,
             mock_stargate_querier::{

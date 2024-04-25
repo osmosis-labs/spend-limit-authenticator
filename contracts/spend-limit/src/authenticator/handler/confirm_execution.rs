@@ -1,9 +1,13 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::authenticator::common::{get_account_spending_fee, update_and_check_spend_limit};
-use crate::spend_limit::{calculate_received_coins, calculate_spent_coins, SpendLimitParams};
-use crate::state::{PRE_EXEC_BALANCES, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
+use crate::fee::get_account_spending_fee;
+use crate::spend_limit::{
+    calculate_received_coins, calculate_spent_coins, update_and_check_spend_limit, SpendLimitParams,
+};
+use crate::state::{
+    PRE_EXEC_BALANCES, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES,
+};
 use crate::ContractError;
 
 use super::validate_and_parse_params;
@@ -63,6 +67,7 @@ pub fn confirm_execution(
 
     update_and_check_spend_limit(
         deps.branch(),
+        &PRICE_INFOS,
         &mut spending,
         spent_coins,
         received_coins,

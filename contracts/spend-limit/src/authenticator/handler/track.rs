@@ -1,4 +1,4 @@
-use crate::authenticator::common::get_account_spending_fee;
+use crate::fee::get_account_spending_fee;
 use crate::state::{PRE_EXEC_BALANCES, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 use cosmwasm_std::{DepsMut, Env, Response};

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Coin, Coins, Timestamp};
+use cosmwasm_std::{Addr, Coin, Coins, Timestamp};
 use cw_storage_plus::Map;
 
 use crate::{
@@ -7,6 +7,24 @@ use crate::{
     spend_limit::SpendingKey,
     ContractError,
 };
+
+/// Get the spending fee for an account. If the account is not the fee payer, it does not count towards the spending limit.
+pub fn get_account_spending_fee(
+    account: &Addr,
+    fee_payer: &Addr,
+    fee_granter: Option<&Addr>,
+    fee: Vec<Coin>,
+) -> Vec<Coin> {
+    // fee granter pay for the fee if specified
+    let fee_payer = fee_granter.unwrap_or(fee_payer);
+
+    // count fee paid towards this account only if the account is the fee payer
+    if account == fee_payer {
+        fee
+    } else {
+        vec![]
+    }
+}
 
 /// Fee that has been spent but not yet tracked as spending.
 /// This is required for failed transactions because if the transaction fails after ante handlers,

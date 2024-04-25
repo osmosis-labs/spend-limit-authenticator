@@ -1,4 +1,3 @@
-mod common;
 mod composite;
 mod error;
 mod handler;
