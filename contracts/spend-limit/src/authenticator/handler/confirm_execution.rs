@@ -1,7 +1,6 @@
 use cosmwasm_std::{DepsMut, Env, Response};
 use osmosis_authenticators::ConfirmExecutionRequest;
 
-use crate::fee::get_account_spending_fee;
 use crate::spend_limit::{
     calculate_received_coins, calculate_spent_coins, update_and_check_spend_limit, SpendLimitParams,
 };
@@ -19,9 +18,6 @@ pub fn confirm_execution(
         authenticator_id,
         account,
         authenticator_params,
-        fee_payer,
-        fee_granter,
-        fee,
         ..
     }: ConfirmExecutionRequest,
 ) -> Result<Response, ContractError> {
@@ -40,6 +36,7 @@ pub fn confirm_execution(
     let mut spent_coins = calculate_spent_coins(&pre_exec_balances, &post_exec_balances)?;
 
     // Get recent untracked spent fee, the latest fee is already captured in the balance difference, so we need to subtract it
+    // This also includes current tx fee, which is not yet captured in the balance difference because fee gets deducted before `track` is called
     let untracked_spent_fee = UNTRACKED_SPENT_FEES
         .may_load(deps.storage, spend_limit_key)?
         .unwrap_or_default()
@@ -50,14 +47,6 @@ pub fn confirm_execution(
     // not counted on the spend limit. We add them here.
     for fee in untracked_spent_fee {
         spent_coins.add(fee)?;
-    }
-
-    // To avoid double counting, we subtract the account spending fee from the spent coins.
-    // This is the fee for the current transaction and thus already captured by the difference in balances.
-    let account_spending_fee =
-        get_account_spending_fee(&account, &fee_payer, fee_granter.as_ref(), fee);
-    for fee in account_spending_fee {
-        spent_coins.sub(fee)?;
     }
 
     let received_coins = calculate_received_coins(&pre_exec_balances, &post_exec_balances)?;

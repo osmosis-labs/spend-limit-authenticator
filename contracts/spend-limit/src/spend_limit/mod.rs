@@ -48,7 +48,9 @@ pub fn update_and_check_spend_limit(
 
     for spent in spent_coins.into_iter() {
         // If the coin is not tracked (hence quoted_value = None), we don't count it towards the spending limit
-        let Some(spent_coin_value) = get_value(deps.branch(), price_info_store, conf, time, spent)?
+        // ceil spent to ensure that total value spent is always greater than or equal to the actual value spent
+        let Some(spent_coin_value) =
+            get_value_ceil(deps.branch(), price_info_store, conf, time, spent)?
         else {
             continue;
         };
@@ -60,8 +62,9 @@ pub fn update_and_check_spend_limit(
 
     for received in received_coins.into_iter() {
         // If the coin is not tracked (hence quoted_value = None), we don't count it towards the spending limit
+        // floor received to ensure that total value spent is always greater than or equal to the actual value spent
         let Some(received_coin_value) =
-            get_value(deps.branch(), price_info_store, conf, time, received)?
+            get_value_floor(deps.branch(), price_info_store, conf, time, received)?
         else {
             continue;
         };
@@ -79,14 +82,14 @@ pub fn update_and_check_spend_limit(
     Ok(())
 }
 
-fn get_value(
+fn get_value_ceil(
     deps: DepsMut,
     price_info_store: &PriceInfoStore,
     conf: &PriceResolutionConfig,
     time: Timestamp,
     coin: Coin,
 ) -> Result<Option<Uint128>, ContractError> {
-    let Some(price_info) = get_and_cache_price(price_info_store, deps, &conf, time, &coin.denom)?
+    let Some(price_info) = get_and_cache_price(price_info_store, deps, conf, time, &coin.denom)?
     else {
         return Ok(None);
     };
@@ -94,6 +97,26 @@ fn get_value(
     let value = coin
         .amount
         .checked_mul_ceil(price_info.price)
+        .map_err(std_err_from_checked_mul_frac)?;
+
+    Ok(Some(value))
+}
+
+fn get_value_floor(
+    deps: DepsMut,
+    price_info_store: &PriceInfoStore,
+    conf: &PriceResolutionConfig,
+    time: Timestamp,
+    coin: Coin,
+) -> Result<Option<Uint128>, ContractError> {
+    let Some(price_info) = get_and_cache_price(price_info_store, deps, conf, time, &coin.denom)?
+    else {
+        return Ok(None);
+    };
+
+    let value = coin
+        .amount
+        .checked_mul_floor(price_info.price)
         .map_err(std_err_from_checked_mul_frac)?;
 
     Ok(Some(value))
@@ -295,7 +318,7 @@ mod tests {
 
         let coin = Coin::new(1, "uosmo");
 
-        let value = get_value(deps.as_mut(), &PRICE_INFOS, &conf, time, coin)
+        let value = get_value_ceil(deps.as_mut(), &PRICE_INFOS, &conf, time, coin)
             .unwrap()
             .unwrap()
             .u128();
