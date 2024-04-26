@@ -39,7 +39,7 @@ mod tests {
         SPENDINGS
             .save(deps.as_mut().storage, key, &Spending::default())
             .unwrap();
-        assert_eq!(SPENDINGS.has(deps.as_ref().storage, key), true);
+        assert!(SPENDINGS.has(deps.as_ref().storage, key));
 
         let msg = OnAuthenticatorRemovedRequest {
             authenticator_id: "2".to_string(),
@@ -55,6 +55,6 @@ mod tests {
         };
 
         on_authenticator_removed(deps.as_mut(), mock_env(), msg).unwrap();
-        assert_eq!(SPENDINGS.has(deps.as_ref().storage, key), false);
+        assert!(!SPENDINGS.has(deps.as_ref().storage, key));
     }
 }

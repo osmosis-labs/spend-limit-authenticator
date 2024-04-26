@@ -201,12 +201,12 @@ mod tests {
         let params_for_querier_setup = params.clone();
         let mut deps = mock_dependencies_with_stargate_querier(
             &[
-                (&"creator".to_string(), &[Coin::new(1000, UUSDC)]),
+                ("creator", &[Coin::new(1000, UUSDC)]),
                 (
-                    &"limited_account".to_string(),
+                    "limited_account",
                     &[Coin::new(2_000_000, UUSDC)],
                 ),
-                (&"recipient".to_string(), &[]),
+                ("recipient", &[]),
             ],
             get_authenticator_query_handler(Box::new(move |req| {
                 let account = req.account.as_str();
@@ -318,7 +318,7 @@ mod tests {
 
         // simulate execute bank send
         deps.querier
-            .update_balance("limited_account", vec![Coin::new(1_000_001, UUSDC).into()]);
+            .update_balance("limited_account", vec![Coin::new(1_000_001, UUSDC)]);
 
         // confirm execution
         sudo(
@@ -451,7 +451,6 @@ mod tests {
             ContractError::InvalidDenom {
                 denom: "uinvalid".to_string()
             }
-            .into()
         );
     }
 

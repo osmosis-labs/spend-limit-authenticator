@@ -42,14 +42,14 @@ mod tests {
 
     #[rstest]
     #[case::always_expire(0, 0, 0, Ok(true))]
-    #[case::always_expire(1708416816_000000000, last_updated_time, 0, Ok(true))]
-    #[case::always_expire(1708416816_000000000, last_updated_time + 1, 0, Ok(true))]
-    #[case::should_expire(1708416816_000000000, last_updated_time + 1, 1, Ok(true))]
-    #[case::should_expire(1708416816_000000000, last_updated_time + 3600_000000000, 3600_000000000, Ok(true))]
-    #[case::should_expire(1708416816_000000000, last_updated_time + 3600_000000001, 3600_000000000, Ok(true))]
-    #[case::should_not_expire(1708416816_000000000, last_updated_time, 1, Ok(false))]
-    #[case::should_not_expire(1708416816_000000000, last_updated_time + 3599_999999999, 3600_000000000, Ok(false))]
-    #[case::invalid_block_time(1708416816_000000000, last_updated_time - 1, 0, Err(
+    #[case::always_expire(1_708_416_816_000_000_000, last_updated_time, 0, Ok(true))]
+    #[case::always_expire(1_708_416_816_000_000_000, last_updated_time + 1, 0, Ok(true))]
+    #[case::should_expire(1_708_416_816_000_000_000, last_updated_time + 1, 1, Ok(true))]
+    #[case::should_expire(1_708_416_816_000_000_000, last_updated_time + 3600_000000000, 3600_000000000, Ok(true))]
+    #[case::should_expire(1_708_416_816_000_000_000, last_updated_time + 3600_000000001, 3600_000000000, Ok(true))]
+    #[case::should_not_expire(1_708_416_816_000_000_000, last_updated_time, 1, Ok(false))]
+    #[case::should_not_expire(1_708_416_816_000_000_000, last_updated_time + 3599_999999999, 3600_000000000, Ok(false))]
+    #[case::invalid_block_time(1_708_416_816_000_000_000, last_updated_time - 1, 0, Err(
         PriceError::CurrentBlockTimeBehindLastUpdate {
             current_block_time: Uint64::from(block_time),
             last_updated_time: Uint64::from(last_updated_time)

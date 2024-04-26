@@ -129,7 +129,7 @@ fn test_no_conversion() {
         SpendLimitError::overspend(1_500_000, 1_502_500).to_string()
     );
 
-    let prev_ts = app.get_block_time_seconds() as i64;
+    let prev_ts = app.get_block_time_seconds();
     let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
     let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
     let diff = next_dt - prev_ts;
@@ -325,7 +325,7 @@ fn test_fee_draining() {
         Coin::new(1_000_000_000_000_000 - 1500000 - 5000, "uosmo").into()
     );
 
-    let prev_ts = app.get_block_time_seconds() as i64;
+    let prev_ts = app.get_block_time_seconds();
     let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
     let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
     let diff = next_dt - prev_ts;
@@ -576,7 +576,7 @@ fn test_with_conversion() {
         SpendLimitError::overspend(1000000, 999_999 + fee_in_uusdc).to_string() // 999_999 is previous spend, this failed due to fee
     );
 
-    let prev_ts = app.get_block_time_seconds() as i64;
+    let prev_ts = app.get_block_time_seconds();
     let prev_dt = OffsetDateTime::from_unix_timestamp(prev_ts).unwrap();
     let next_dt = (prev_dt + Duration::days(1)).unix_timestamp();
     let diff = next_dt - prev_ts;
@@ -881,7 +881,7 @@ fn test_1_click_trading() {
     let err = bank_send(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_1,
+        one_click_trading_session_signer_1,
         &account_owner.address(),
         vec![Coin::new(1, "uosmo")],
         one_click_trading_auth_id_1,
@@ -899,7 +899,7 @@ fn test_1_click_trading() {
     let err = one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &wrong_signer,
+        wrong_signer,
         vec![SwapAmountInRoute {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),
@@ -934,7 +934,7 @@ fn test_1_click_trading() {
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_1,
+        one_click_trading_session_signer_1,
         vec![SwapAmountInRoute {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),
@@ -993,7 +993,7 @@ fn test_1_click_trading() {
     let err = one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_1,
+        one_click_trading_session_signer_1,
         vec![SwapAmountInRoute {
             pool_id: ion_atom_pool_id,
             token_out_denom: UATOM.to_string(),
@@ -1033,7 +1033,7 @@ fn test_1_click_trading() {
     let err = one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_1,
+        one_click_trading_session_signer_1,
         vec![SwapAmountInRoute {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),
@@ -1050,7 +1050,7 @@ fn test_1_click_trading() {
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_2,
+        one_click_trading_session_signer_2,
         vec![SwapAmountInRoute {
             pool_id: ion_atom_pool_id,
             token_out_denom: UATOM.to_string(),
@@ -1136,7 +1136,7 @@ fn test_1_click_trading() {
     one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_1,
+        one_click_trading_session_signer_1,
         vec![SwapAmountInRoute {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),
@@ -1161,13 +1161,13 @@ fn test_1_click_trading() {
     assert_eq!(spending.value_spent_in_period.u128(), limit);
 
     // increase time for 1 day, which the time limit for session 1 is over (3 days)
-    app.increase_time(24 * 60 * 60 * 1);
+    app.increase_time(24 * 60 * 60);
 
     // try spend the last bit should fail due to time limit
     let err = one_click_swap_exact_amount_in(
         &app,
         &account_owner,
-        &one_click_trading_session_signer_1,
+        one_click_trading_session_signer_1,
         vec![SwapAmountInRoute {
             pool_id: osmo_usdc_pool_id,
             token_out_denom: "uosmo".to_string(),

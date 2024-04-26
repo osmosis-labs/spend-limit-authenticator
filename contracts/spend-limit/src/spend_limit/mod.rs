@@ -32,6 +32,7 @@ pub type PreExecBalance<'a> = Map<'a, SpendingKey<'a>, Vec<Coin>>;
 /// allows multiple spend limits per account.
 pub type SpendingKey<'a> = (&'a Addr, &'a str);
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_and_check_spend_limit(
     mut deps: DepsMut,
     price_info_store: &PriceInfoStore,
@@ -44,7 +45,7 @@ pub fn update_and_check_spend_limit(
     time: Timestamp,
 ) -> Result<(), ContractError> {
     let prev_value_spent = spending.get_or_reset_value_spent(reset_period, time)?;
-    let mut value_spent = prev_value_spent.clone();
+    let mut value_spent = prev_value_spent;
 
     for spent in spent_coins.into_iter() {
         // If the coin is not tracked (hence quoted_value = None), we don't count it towards the spending limit
@@ -131,15 +132,14 @@ pub fn get_spend_limit_params(
 ) -> Result<SpendLimitParams, ContractError> {
     let smart_account_querier = SmartaccountQuerier::new(&deps.querier);
 
-    let composite_id =
-        CompositeId::from_str(&authenticator_id).map_err(AuthenticatorError::from)?;
+    let composite_id = CompositeId::from_str(authenticator_id).map_err(AuthenticatorError::from)?;
 
     let response =
         smart_account_querier.get_authenticator(account.to_string(), composite_id.root)?;
 
     let spend_limit_auth_data = response
         .account_authenticator
-        .ok_or(StdError::not_found(&format!(
+        .ok_or(StdError::not_found(format!(
             "Authenticator with account = {}, authenticator_id = {}",
             account, authenticator_id
         )))?
@@ -150,6 +150,7 @@ pub fn get_spend_limit_params(
 }
 
 /// Update stored spending with updated information such as reset period, untracked spent fee
+#[allow(clippy::too_many_arguments)]
 pub fn updated_spending(
     deps: Deps,
     price_info_store: &PriceInfoStore,
@@ -160,7 +161,7 @@ pub fn updated_spending(
     at: Timestamp,
     spending: Spending,
 ) -> Result<Spending, ContractError> {
-    let params = get_spend_limit_params(deps, &account, &authenticator_id)?;
+    let params = get_spend_limit_params(deps, account, authenticator_id)?;
     let mut value_spent_in_period = spending.get_or_reset_value_spent(&params.reset_period, at)?;
 
     // add untracked spent fee as part of value spent
@@ -232,7 +233,7 @@ mod tests {
         mock_dependencies()
     }
 
-    fn setup_price_infos<'a>(deps: DepsMut) {
+    fn setup_price_infos(deps: DepsMut) {
         let uosmo_price_info = PriceInfo {
             price: Decimal::from_str("1.5").unwrap(),
             last_updated_time: Timestamp::from_seconds(1_625_702_410),

@@ -31,7 +31,7 @@ pub struct Route {
 }
 
 impl Route {
-    fn to_swap_amount_in_route(self) -> Vec<SwapAmountInRoute> {
+    fn into_swap_amount_in_route(self) -> Vec<SwapAmountInRoute> {
         self.pools
             .into_iter()
             .map(|pool| SwapAmountInRoute {
@@ -79,7 +79,7 @@ pub async fn get_route(
                 && is_all_pool_synced(route, latest_synced_pool)
                 && !has_blacklisted_pool(route, &blacklisted_pools)
         })
-        .map(Route::to_swap_amount_in_route)
+        .map(Route::into_swap_amount_in_route)
         .collect())
 }
 

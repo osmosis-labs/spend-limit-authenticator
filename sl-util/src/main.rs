@@ -464,7 +464,7 @@ async fn select_routes(
                         }
 
                         // update resulted price for next route
-                        resulted_price = resulted_price * twap
+                        resulted_price *= twap
                     }
                     Err(e) => {
                         let m = format!(
@@ -524,7 +524,7 @@ async fn select_routes(
             Mode::Edit => "✍️ Message editing completed!",
         }
     );
-    return Ok(());
+    Ok(())
 }
 
 async fn get_token_map() -> Result<BTreeMap<String, TokenInfo>> {

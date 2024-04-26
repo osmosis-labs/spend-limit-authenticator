@@ -53,7 +53,7 @@ pub fn authenticate(
 
     // check whether the fee spent + about to spend is within the limit
     // this will not be committed to the state
-    let coins = vec![untracked_spent_fee, account_spending_fee].concat();
+    let coins = [untracked_spent_fee, account_spending_fee].concat();
     update_and_check_spend_limit(
         deps,
         &PRICE_INFOS,

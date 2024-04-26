@@ -101,12 +101,12 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::spend_at_limit(1000, 500, 500, vec![Coin::new(1000_000_000, "uosmo")], Ok(Response::new()
+    #[case::spend_at_limit(1000, 500, 500, vec![Coin::new(1_000_000_000, "uosmo")], Ok(Response::new()
         .add_attribute("action", "confirm_execution")
         .add_attribute("spent", spent.to_string())
         .add_attribute("limit", limit.to_string())
     ))]
-    #[case::spend_over_limit(1000, 500, 501, vec![Coin::new(1000_000_000, "uosmo")], Err(SpendLimitError::overspend(500, 501).into()))]
+    #[case::spend_over_limit(1000, 500, 501, vec![Coin::new(1_000_000_000, "uosmo")], Err(SpendLimitError::overspend(500, 501).into()))]
     fn test_confirm_execution_only_spends_quoted_denom(
         #[case] initial_balance: u128,
         #[case] limit: u128,

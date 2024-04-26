@@ -169,7 +169,7 @@ mod tests {
             staleness_threshold: 3_600_000_000_000u64.into(), // 1h
             twap_duration: 3_600_000_000_000u64.into(),       // 1h
         };
-        let block_time = Timestamp::from_nanos(1708416816_000000000);
+        let block_time = Timestamp::from_nanos(1_708_416_816_000_000_000);
         let expected_start_time =
             to_proto_timestamp(block_time.minus_nanos(conf.twap_duration.u64()));
 
@@ -230,7 +230,7 @@ mod tests {
             staleness_threshold: 3_600_000_000_000u64.into(), // 1h
             twap_duration: 3_600_000_000_000u64.into(),       // 1h
         };
-        let last_updated_time = Timestamp::from_nanos(1708416816_000000000);
+        let last_updated_time = Timestamp::from_nanos(1_708_416_816_000_000_000);
 
         let mut deps = mock_dependencies_with_stargate_querier(
             &[],
@@ -255,7 +255,7 @@ mod tests {
 
         let cached_price_info = PriceInfo {
             price: "1.400000000000000000".parse::<Decimal>().unwrap(),
-            last_updated_time: last_updated_time.clone(),
+            last_updated_time,
             swap_routes: swap_routes.clone(),
         };
 
@@ -346,13 +346,13 @@ mod tests {
         UATOM,
         UUSDC,
         vec![
-            SwapAmountInRoute { pool_id: 1, token_out_denom: "uosmo".to_string() }, 
+            SwapAmountInRoute { pool_id: 1, token_out_denom: "uosmo".to_string() },
             SwapAmountInRoute { pool_id: 2, token_out_denom: UUSDC.to_string() }
         ],
         Ok("9.600000000000000000")
     )]
     #[case::swap_routes_not_ending_with_quote_denom(
-        "uosmo", 
+        "uosmo",
         UUSDC,
         vec![
             SwapAmountInRoute { pool_id: 1, token_out_denom: UATOM.to_string() }
@@ -360,22 +360,22 @@ mod tests {
         Err(PriceError::SwapRoutesMustEndWithQuoteDenom { quote_denom: UUSDC.to_string(), swap_routes: swap_routes.clone() })
     )]
     #[case::empty_swap_routes(
-        "uosmo", 
+        "uosmo",
         UUSDC,
         vec![],
         Err(PriceError::SwapRoutesMustEndWithQuoteDenom { quote_denom: UUSDC.to_string(), swap_routes: swap_routes.clone() })
     )]
     #[case::invalid_arithmetic_twap(
-        "uany", 
-        "uinvalid", 
+        "uany",
+        "uinvalid",
         vec![
             SwapAmountInRoute { pool_id: 99, token_out_denom: "uinvalid".to_string() }
         ],
         Err(PriceError::StdError(cosmwasm_std::StdError::generic_err("Error parsing whole")))
     )]
     #[case::overflow_arithmetic_twap(
-        "uany", 
-        "uoverflow", 
+        "uany",
+        "uoverflow",
         vec![
             SwapAmountInRoute { pool_id: 991, token_out_denom: "udecmax".to_string() },
             SwapAmountInRoute { pool_id: 992, token_out_denom: "uoverflow".to_string() }
@@ -396,7 +396,7 @@ mod tests {
             staleness_threshold: 3_600_000_000_000u64.into(), // 1h
             twap_duration: 3_600_000_000_000u64.into(),       // 1h
         };
-        let block_time = Timestamp::from_nanos(1708416816_000000000);
+        let block_time = Timestamp::from_nanos(1_708_416_816_000_000_000);
 
         let deps = mock_dependencies_with_stargate_querier(
             &[], // No balances needed for this test
@@ -448,13 +448,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Timestamp::from_nanos(1708416816_000000000), ProtoTimestamp { seconds: 1708416816, nanos: 0 })]
-    #[case(Timestamp::from_nanos(1609459200_000000000), ProtoTimestamp { seconds: 1609459200, nanos: 0 })]
-    #[case(Timestamp::from_nanos(1708416816_500000000), ProtoTimestamp { seconds: 1708416816, nanos: 500000000 })]
-    #[case(Timestamp::from_nanos(1609459200_250000001), ProtoTimestamp { seconds: 1609459200, nanos: 250000001 })]
-    #[case(Timestamp::from_nanos(1509495600_750000002), ProtoTimestamp { seconds: 1509495600, nanos: 750000002 })]
-    #[case(Timestamp::from_nanos(1409532000_125000003), ProtoTimestamp { seconds: 1409532000, nanos: 125000003 })]
-    #[case(Timestamp::from_nanos(1309568400_875000004), ProtoTimestamp { seconds: 1309568400, nanos: 875000004 })]
+    #[case(Timestamp::from_nanos(1_708_416_816_000_000_000), ProtoTimestamp { seconds: 1708416816, nanos: 0 })]
+    #[case(Timestamp::from_nanos(1_609_459_200_000_000_000), ProtoTimestamp { seconds: 1609459200, nanos: 0 })]
+    #[case(Timestamp::from_nanos(1_708_416_816_500_000_000), ProtoTimestamp { seconds: 1708416816, nanos: 500000000 })]
+    #[case(Timestamp::from_nanos(1_609_459_200_250_000_001), ProtoTimestamp { seconds: 1609459200, nanos: 250000001 })]
+    #[case(Timestamp::from_nanos(1_509_495_600_750_000_002), ProtoTimestamp { seconds: 1509495600, nanos: 750000002 })]
+    #[case(Timestamp::from_nanos(1_409_532_000_125_000_003), ProtoTimestamp { seconds: 1409532000, nanos: 125000003 })]
+    #[case(Timestamp::from_nanos(1_309_568_400_875_000_004), ProtoTimestamp { seconds: 1309568400, nanos: 875000004 })]
     fn test_to_proto_timestamp(#[case] input: Timestamp, #[case] expected: ProtoTimestamp) {
         let result = to_proto_timestamp(input);
         assert_eq!(result, expected);

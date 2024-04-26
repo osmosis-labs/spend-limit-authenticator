@@ -25,7 +25,7 @@ pub struct SubAuthenticatorData {
     pub data: Vec<u8>,
 }
 
-pub fn spend_limit_store_code<'a>(wasm: &Wasm<'a, OsmosisTestApp>, acc: &SigningAccount) -> u64 {
+pub fn spend_limit_store_code(wasm: &Wasm<'_, OsmosisTestApp>, acc: &SigningAccount) -> u64 {
     let wasm_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
@@ -42,8 +42,8 @@ pub fn spend_limit_store_code<'a>(wasm: &Wasm<'a, OsmosisTestApp>, acc: &Signing
         .code_id
 }
 
-pub fn spend_limit_instantiate<'a>(
-    wasm: &Wasm<'a, OsmosisTestApp>,
+pub fn spend_limit_instantiate(
+    wasm: &Wasm<'_, OsmosisTestApp>,
     code_id: u64,
     msg: &InstantiateMsg,
     acc: &SigningAccount,
@@ -61,7 +61,7 @@ pub fn spend_limit_instantiate<'a>(
     .address
 }
 
-pub fn add_spend_limit_authenticator<'a>(
+pub fn add_spend_limit_authenticator(
     app: &OsmosisTestApp,
     acc: &SigningAccount,
     contract: &str,
@@ -78,7 +78,7 @@ pub fn add_spend_limit_authenticator<'a>(
     )
 }
 
-pub fn add_all_of_sig_ver_spend_limit_authenticator<'a>(
+pub fn add_all_of_sig_ver_spend_limit_authenticator(
     app: &OsmosisTestApp,
     acc: &SigningAccount,
     contract: &str,
@@ -114,7 +114,7 @@ pub fn add_all_of_sig_ver_spend_limit_authenticator<'a>(
 ///         MessageFilterAuthenticator({"@type":"/osmosis.poolmanager.v1beta1.MsgSwapExactAmountIn"})
 ///         MessageFilterAuthenticator({"@type":"/osmosis.poolmanager.v1beta1.MsgSplitRouteSwapExactAmountIn"})
 ///     )
-pub fn add_1ct_session_authenticator<'a>(
+pub fn add_1ct_session_authenticator(
     app: &OsmosisTestApp,
     acc: &SigningAccount,
     session_pubkey: &[u8],
