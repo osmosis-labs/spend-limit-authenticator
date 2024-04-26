@@ -1,5 +1,6 @@
 pub mod authenticator;
 
+pub mod admin;
 pub mod fee;
 pub mod period;
 pub mod price;
