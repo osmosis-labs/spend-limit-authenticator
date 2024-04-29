@@ -13,7 +13,7 @@ use crate::ContractError;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    Storage, Timestamp,
+    Storage, Timestamp, Uint64,
 };
 use cw2::set_contract_version;
 
@@ -72,9 +72,10 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::SetPriceResolutionConfig {
-            price_resolution_config,
-        } => set_price_resolution_config(deps, info, price_resolution_config),
+        ExecuteMsg::SetPriceResolutionParams {
+            staleness_threshold,
+            twap_duration,
+        } => set_price_resolution_config(deps, info, staleness_threshold, twap_duration),
         ExecuteMsg::SetTrackedDenoms { tracked_denoms } => {
             set_tracked_denoms(deps, env, info, tracked_denoms)
         }
@@ -89,11 +90,18 @@ pub fn execute(
 fn set_price_resolution_config(
     deps: DepsMut,
     info: MessageInfo,
-    price_resolution_config: PriceResolutionConfig,
+    staleness_threshold: Uint64,
+    twap_duration: Uint64,
 ) -> Result<Response, ContractError> {
     authorize_admin(deps.storage, &info.sender)?;
 
-    PRICE_RESOLUTION_CONFIG.save(deps.storage, &price_resolution_config)?;
+    PRICE_RESOLUTION_CONFIG.update(deps.storage, |conf| -> Result<_, ContractError> {
+        Ok(PriceResolutionConfig {
+            quote_denom: conf.quote_denom,
+            staleness_threshold,
+            twap_duration,
+        })
+    })?;
 
     Ok(Response::new().add_attribute("action", "set_price_resolution_config"))
 }
@@ -980,12 +988,13 @@ mod tests {
         assert_eq!(price_resolution_config, init_config);
 
         let new_config = PriceResolutionConfig {
-            quote_denom: "uosmo".to_string(),
+            quote_denom: UUSDC.to_string(),
             staleness_threshold: Uint64::from(7_200_000_000u64),
             twap_duration: Uint64::from(7_200_000_000u64),
         };
-        let msg = ExecuteMsg::SetPriceResolutionConfig {
-            price_resolution_config: new_config.clone(),
+        let msg = ExecuteMsg::SetPriceResolutionParams {
+            staleness_threshold: new_config.staleness_threshold,
+            twap_duration: new_config.twap_duration,
         };
         let info = mock_info("non_admin", &[]);
         let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
@@ -1178,4 +1187,8 @@ mod tests {
 
         (admin, candidate)
     }
+
+    // TODO: test set tracked denoms
+    // test admin can set tracked denoms
+    // need to mock stargate query
 }

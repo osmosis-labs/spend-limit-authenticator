@@ -1,4 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Uint64;
 pub use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::{price::PriceResolutionConfig, spend_limit::Spending};
@@ -21,8 +22,14 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    SetPriceResolutionConfig {
-        price_resolution_config: PriceResolutionConfig,
+    SetPriceResolutionParams {
+        /// Duration in nanoseconds that the price is considered stale.
+        /// If the current time is greater than the last_updated_time + staleness_threshold,
+        /// the price needs to be updated.
+        staleness_threshold: Uint64,
+
+        /// Twap duration in nanoseconds
+        twap_duration: Uint64,
     },
     SetTrackedDenoms {
         tracked_denoms: Vec<TrackedDenom>,
