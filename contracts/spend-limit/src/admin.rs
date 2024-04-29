@@ -1,7 +1,9 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{ensure, Addr};
 
 use crate::ContractError;
 
+#[cw_serde]
 pub enum Admin {
     Settled(Addr),
     Transferring { current: Addr, candidate: Addr },
@@ -9,6 +11,10 @@ pub enum Admin {
 }
 
 impl Admin {
+    pub fn new(address: Addr) -> Self {
+        Admin::Settled(address)
+    }
+
     pub fn admin(&self) -> Option<&Addr> {
         match self {
             Admin::Settled(current) => Some(current),
@@ -17,7 +23,22 @@ impl Admin {
         }
     }
 
+    pub fn admin_once(self) -> Option<Addr> {
+        match self {
+            Admin::Settled(current) => Some(current),
+            Admin::Transferring { current, .. } => Some(current),
+            Admin::None => None,
+        }
+    }
+
     pub fn candidate(&self) -> Option<&Addr> {
+        match self {
+            Admin::Transferring { candidate, .. } => Some(candidate),
+            _ => None,
+        }
+    }
+
+    pub fn candidate_once(self) -> Option<Addr> {
         match self {
             Admin::Transferring { candidate, .. } => Some(candidate),
             _ => None,

@@ -8,4 +8,7 @@ pub struct Config {
 
     /// The denoms to track, used for calculating route via sqs
     pub tracked_denoms: Vec<String>,
+
+    /// The admin address
+    pub admin: Option<String>,
 }

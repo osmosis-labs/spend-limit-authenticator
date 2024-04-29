@@ -1,14 +1,18 @@
+use crate::admin::Admin;
 use crate::authenticator::{self};
-use crate::msg::{InstantiateMsg, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg};
+use crate::msg::{
+    AdminCandidateResponse, AdminResponse, ExecuteMsg, InstantiateMsg, QueryMsg, SpendingResponse,
+    SpendingsByAccountResponse, SudoMsg,
+};
 use crate::price::track_denom;
 use crate::spend_limit::{updated_spending, SpendLimitError};
-use crate::state::{PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
+use crate::state::{ADMIN, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    Timestamp,
+    Storage, Timestamp,
 };
 use cw2::set_contract_version;
 
@@ -23,6 +27,12 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    // save admin if set
+    if let Some(admin) = msg.admin {
+        let admin = deps.api.addr_validate(&admin)?;
+        ADMIN.save(deps.storage, &Admin::new(admin))?;
+    }
 
     let conf = msg.price_resolution_config;
 
@@ -51,6 +61,61 @@ pub fn instantiate(
     }
 
     Ok(Response::new().add_attribute("action", "instantiate"))
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn execute(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> Result<Response, ContractError> {
+    match msg {
+        ExecuteMsg::TransferAdmin { address } => transfer_admin(deps, info, address),
+        ExecuteMsg::ClaimAdmin {} => claim_admin(deps, info),
+        ExecuteMsg::RevokeAdmin {} => revoke_admin(deps, info),
+    }
+}
+
+fn transfer_admin(
+    deps: DepsMut,
+    info: MessageInfo,
+    address: String,
+) -> Result<Response, ContractError> {
+    let candidate = deps.api.addr_validate(&address)?;
+
+    update_admin(deps.storage, |admin| {
+        admin.authorized_transfer_admin(&info.sender, candidate)
+    })?;
+
+    Ok(Response::new().add_attribute("action", "transfer_admin"))
+}
+
+fn claim_admin(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    update_admin(deps.storage, |admin| {
+        admin.authorized_claim_admin(&info.sender)
+    })?;
+
+    Ok(Response::new().add_attribute("action", "claim_admin"))
+}
+
+fn revoke_admin(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    update_admin(deps.storage, |admin| {
+        admin.authorized_revoke_admin(&info.sender)
+    })?;
+
+    Ok(Response::new().add_attribute("action", "revoke_admin"))
+}
+
+fn update_admin(
+    store: &mut dyn Storage,
+    action: impl FnOnce(Admin) -> Result<Admin, ContractError>,
+) -> Result<(), ContractError> {
+    let admin = ADMIN.may_load(store)?.unwrap_or(Admin::None);
+
+    ADMIN.save(store, &action(admin)?)?;
+
+    Ok(())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -93,6 +158,18 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             let account = deps.api.addr_validate(&account)?;
             to_json_binary(&query_spendings_by_account(deps, account, env.block.time)?)
         }
+        QueryMsg::Admin {} => to_json_binary(&AdminResponse {
+            admin: ADMIN
+                .may_load(deps.storage)?
+                .and_then(|a| a.admin_once())
+                .map(|a| a.to_string()),
+        }),
+        QueryMsg::AdminCandidate {} => to_json_binary(&AdminCandidateResponse {
+            candidate: ADMIN
+                .may_load(deps.storage)?
+                .and_then(|a| a.candidate_once())
+                .map(|a| a.to_string()),
+        }),
     }
     .map_err(ContractError::from)
 }
@@ -151,6 +228,7 @@ pub fn query_spendings_by_account(
     Ok(SpendingsByAccountResponse { spendings })
 }
 
+// TODO: test admin related stuffs
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -202,10 +280,7 @@ mod tests {
         let mut deps = mock_dependencies_with_stargate_querier(
             &[
                 ("creator", &[Coin::new(1000, UUSDC)]),
-                (
-                    "limited_account",
-                    &[Coin::new(2_000_000, UUSDC)],
-                ),
+                ("limited_account", &[Coin::new(2_000_000, UUSDC)]),
                 ("recipient", &[]),
             ],
             get_authenticator_query_handler(Box::new(move |req| {
@@ -234,6 +309,7 @@ mod tests {
                 twap_duration: Uint64::from(3_600_000_000u64),
             },
             tracked_denoms: vec![],
+            admin: None,
         };
         let info = mock_info("creator", &[]);
         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -443,6 +519,7 @@ mod tests {
                 twap_duration: Uint64::from(3_600_000_000u64),
             },
             tracked_denoms: vec![],
+            admin: None,
         };
         let info = mock_info("creator", &[]);
         let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
