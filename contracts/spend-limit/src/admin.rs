@@ -24,12 +24,12 @@ impl Admin {
         }
     }
 
-    pub fn ensure_admin(&self, addr: &Addr) -> Result<(), ContractError> {
+    pub fn authorize_admin(&self, addr: &Addr) -> Result<(), ContractError> {
         ensure!(Some(addr) == self.admin(), ContractError::Unauthorized {});
         Ok(())
     }
 
-    pub fn ensure_candidate(&self, addr: &Addr) -> Result<(), ContractError> {
+    pub fn authorize_candidate(&self, addr: &Addr) -> Result<(), ContractError> {
         ensure!(
             Some(addr) == self.candidate(),
             ContractError::Unauthorized {}
@@ -37,14 +37,18 @@ impl Admin {
         Ok(())
     }
 
-    pub fn revoke_admin(self, sender: &Addr) -> Result<Self, ContractError> {
-        self.ensure_admin(sender)?;
+    pub fn authorized_revoke_admin(self, sender: &Addr) -> Result<Self, ContractError> {
+        self.authorize_admin(sender)?;
 
         Ok(Admin::None)
     }
 
-    pub fn transfer_admin(self, sender: &Addr, candidate: Addr) -> Result<Self, ContractError> {
-        self.ensure_admin(sender)?;
+    pub fn authorized_transfer_admin(
+        self,
+        sender: &Addr,
+        candidate: Addr,
+    ) -> Result<Self, ContractError> {
+        self.authorize_admin(sender)?;
 
         match self {
             Admin::Settled(current) => Ok(Admin::Transferring { current, candidate }),
@@ -55,8 +59,8 @@ impl Admin {
         }
     }
 
-    pub fn claim_admin(self, sender: &Addr) -> Result<Self, ContractError> {
-        self.ensure_candidate(sender)?;
+    pub fn authorized_claim_admin(self, sender: &Addr) -> Result<Self, ContractError> {
+        self.authorize_candidate(sender)?;
 
         match self {
             Admin::Transferring { candidate, .. } => Ok(Admin::Settled(candidate)),
@@ -108,7 +112,7 @@ mod tests {
     fn ensure_admin_success() {
         let addr = Addr::unchecked("admin");
         let admin = Admin::Settled(addr.clone());
-        assert!(admin.ensure_admin(&addr).is_ok());
+        assert!(admin.authorize_admin(&addr).is_ok());
     }
 
     #[test]
@@ -118,16 +122,16 @@ mod tests {
         let candidate = Addr::unchecked("candidate");
         let other_addr = Addr::unchecked("other");
         let admin = Admin::Settled(addr);
-        assert!(admin.ensure_admin(&other_addr).is_err());
+        assert!(admin.authorize_admin(&other_addr).is_err());
 
         let admin = Admin::Transferring {
             current: current.clone(),
             candidate,
         };
-        assert!(admin.ensure_admin(&other_addr).is_err());
+        assert!(admin.authorize_admin(&other_addr).is_err());
 
         let admin = Admin::None;
-        assert!(admin.ensure_admin(&other_addr).is_err());
+        assert!(admin.authorize_admin(&other_addr).is_err());
     }
 
     #[test]
@@ -138,7 +142,7 @@ mod tests {
             current,
             candidate: candidate.clone(),
         };
-        assert!(admin.ensure_candidate(&candidate).is_ok());
+        assert!(admin.authorize_candidate(&candidate).is_ok());
     }
 
     #[test]
@@ -150,20 +154,23 @@ mod tests {
             current: current.clone(),
             candidate: candidate.clone(),
         };
-        assert!(admin_transferring.ensure_candidate(&other_addr).is_err());
+        assert!(admin_transferring.authorize_candidate(&other_addr).is_err());
 
         let admin_settled = Admin::Settled(current);
-        assert!(admin_settled.ensure_candidate(&other_addr).is_err());
+        assert!(admin_settled.authorize_candidate(&other_addr).is_err());
 
         let admin_none = Admin::None;
-        assert!(admin_none.ensure_candidate(&other_addr).is_err());
+        assert!(admin_none.authorize_candidate(&other_addr).is_err());
     }
 
     #[test]
     fn revoke_admin_success() {
         let addr = Addr::unchecked("admin");
         let admin = Admin::Settled(addr.clone());
-        assert!(matches!(admin.revoke_admin(&addr), Ok(Admin::None)));
+        assert!(matches!(
+            admin.authorized_revoke_admin(&addr),
+            Ok(Admin::None)
+        ));
     }
 
     #[test]
@@ -171,7 +178,7 @@ mod tests {
         let addr = Addr::unchecked("admin");
         let other_addr = Addr::unchecked("other");
         let admin = Admin::Settled(addr);
-        assert!(admin.revoke_admin(&other_addr).is_err());
+        assert!(admin.authorized_revoke_admin(&other_addr).is_err());
     }
 
     #[test]
@@ -180,7 +187,7 @@ mod tests {
         let candidate = Addr::unchecked("candidate");
         let admin = Admin::Settled(addr.clone());
         assert!(matches!(
-            admin.transfer_admin(&addr, candidate.clone()),
+            admin.authorized_transfer_admin(&addr, candidate.clone()),
             Ok(Admin::Transferring {
                 current: _,
                 candidate: _
@@ -194,7 +201,9 @@ mod tests {
         let candidate = Addr::unchecked("candidate");
         let other_addr = Addr::unchecked("other");
         let admin = Admin::Settled(addr);
-        assert!(admin.transfer_admin(&other_addr, candidate).is_err());
+        assert!(admin
+            .authorized_transfer_admin(&other_addr, candidate)
+            .is_err());
     }
 
     #[test]
@@ -206,7 +215,7 @@ mod tests {
             candidate: candidate.clone(),
         };
         assert!(matches!(
-            admin.claim_admin(&candidate),
+            admin.authorized_claim_admin(&candidate),
             Ok(Admin::Settled(_))
         ));
     }
@@ -217,6 +226,6 @@ mod tests {
         let candidate = Addr::unchecked("candidate");
         let other_addr = Addr::unchecked("other");
         let admin = Admin::Transferring { current, candidate };
-        assert!(admin.claim_admin(&other_addr).is_err());
+        assert!(admin.authorized_claim_admin(&other_addr).is_err());
     }
 }
