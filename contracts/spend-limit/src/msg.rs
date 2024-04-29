@@ -24,6 +24,9 @@ pub enum ExecuteMsg {
     SetPriceResolutionConfig {
         price_resolution_config: PriceResolutionConfig,
     },
+    SetTrackedDenoms {
+        tracked_denoms: Vec<TrackedDenom>,
+    },
     TransferAdmin {
         address: String,
     },

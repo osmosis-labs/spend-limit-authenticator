@@ -3,6 +3,7 @@ use crate::authenticator::{self};
 use crate::msg::{
     AdminCandidateResponse, AdminResponse, ExecuteMsg, InstantiateMsg,
     PriceResolutionConfigResponse, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg,
+    TrackedDenom,
 };
 use crate::price::{track_denom, PriceResolutionConfig};
 use crate::spend_limit::{updated_spending, SpendLimitError};
@@ -66,7 +67,7 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
@@ -74,6 +75,9 @@ pub fn execute(
         ExecuteMsg::SetPriceResolutionConfig {
             price_resolution_config,
         } => set_price_resolution_config(deps, info, price_resolution_config),
+        ExecuteMsg::SetTrackedDenoms { tracked_denoms } => {
+            set_tracked_denoms(deps, env, info, tracked_denoms)
+        }
         ExecuteMsg::TransferAdmin { address } => transfer_admin(deps, info, address),
         ExecuteMsg::ClaimAdminTransfer {} => claim_admin_transfer(deps, info),
         ExecuteMsg::RejectAdminTransfer {} => reject_admin_transfer(deps, info),
@@ -92,6 +96,32 @@ fn set_price_resolution_config(
     PRICE_RESOLUTION_CONFIG.save(deps.storage, &price_resolution_config)?;
 
     Ok(Response::new().add_attribute("action", "set_price_resolution_config"))
+}
+
+fn set_tracked_denoms(
+    mut deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    tracked_denoms: Vec<TrackedDenom>,
+) -> Result<Response, ContractError> {
+    authorize_admin(deps.storage, &info.sender)?;
+
+    let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
+
+    for tracked_denom in tracked_denoms {
+        let denom = tracked_denom.denom;
+        let swap_routes = tracked_denom.swap_routes;
+        track_denom(
+            &PRICE_INFOS,
+            deps.branch(),
+            &conf,
+            &denom,
+            env.block.time,
+            swap_routes,
+        )?;
+    }
+
+    Ok(Response::new().add_attribute("action", "set_tracked_denoms"))
 }
 
 fn transfer_admin(
