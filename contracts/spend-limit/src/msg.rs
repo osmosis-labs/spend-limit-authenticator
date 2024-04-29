@@ -22,7 +22,9 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     TransferAdmin { address: String },
-    ClaimAdmin {},
+    ClaimAdminTransfer {},
+    RejectAdminTransfer {},
+    CancelAdminTransfer {},
     RevokeAdmin {},
 }
 

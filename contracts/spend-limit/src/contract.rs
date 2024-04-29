@@ -72,7 +72,9 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::TransferAdmin { address } => transfer_admin(deps, info, address),
-        ExecuteMsg::ClaimAdmin {} => claim_admin(deps, info),
+        ExecuteMsg::ClaimAdminTransfer {} => claim_admin_transfer(deps, info),
+        ExecuteMsg::RejectAdminTransfer {} => reject_admin_transfer(deps, info),
+        ExecuteMsg::CancelAdminTransfer {} => cancel_admin_transfer(deps, info),
         ExecuteMsg::RevokeAdmin {} => revoke_admin(deps, info),
     }
 }
@@ -91,12 +93,28 @@ fn transfer_admin(
     Ok(Response::new().add_attribute("action", "transfer_admin"))
 }
 
-fn claim_admin(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+fn claim_admin_transfer(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
     update_admin(deps.storage, |admin| {
-        admin.authorized_claim_admin(&info.sender)
+        admin.authorized_claim_admin_transfer(&info.sender)
     })?;
 
     Ok(Response::new().add_attribute("action", "claim_admin"))
+}
+
+fn reject_admin_transfer(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    update_admin(deps.storage, |admin| {
+        admin.authorized_reject_admin_transfer(&info.sender)
+    })?;
+
+    Ok(Response::new().add_attribute("action", "reject_admin"))
+}
+
+fn cancel_admin_transfer(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    update_admin(deps.storage, |admin| {
+        admin.authorized_cancel_admin_transfer(&info.sender)
+    })?;
+
+    Ok(Response::new().add_attribute("action", "cancel_admin"))
 }
 
 fn revoke_admin(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
@@ -228,14 +246,13 @@ pub fn query_spendings_by_account(
     Ok(SpendingsByAccountResponse { spendings })
 }
 
-// TODO: test admin related stuffs
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
     use cosmwasm_std::{
         from_json,
-        testing::{mock_dependencies, mock_env, mock_info},
+        testing::{mock_dependencies, mock_dependencies_with_balances, mock_env, mock_info},
         to_json_vec, BlockInfo, Coin, ContractResult, Uint128, Uint64,
     };
     use osmosis_authenticators::{
@@ -876,5 +893,175 @@ mod tests {
             transaction: mock_env().transaction,
             contract: mock_env().contract,
         }
+    }
+
+    #[test]
+    fn test_no_admin() {
+        let mut deps =
+            mock_dependencies_with_balances(&[("creator", &[Coin::new(100000000, UUSDC)])]);
+
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: UUSDC.to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![],
+            admin: None,
+        };
+        let info = mock_info("creator", &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+
+        assert_eq!(admin, None);
+        assert_eq!(candidate, None);
+    }
+
+    #[test]
+    fn test_admin() {
+        let mut deps =
+            mock_dependencies_with_balances(&[("creator", &[Coin::new(100000000, UUSDC)])]);
+
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: UUSDC.to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![],
+            admin: Some("admin".to_string()),
+        };
+        let info = mock_info("creator", &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+
+        assert_eq!(admin, Some("admin".to_string()));
+        assert_eq!(candidate, None);
+
+        // non admin can't transfer admin
+        let info = mock_info("creator", &[]);
+        let msg = ExecuteMsg::TransferAdmin {
+            address: "new_admin".to_string(),
+        };
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        // admin can transfer admin
+        let info = mock_info("admin", &[]);
+        let msg = ExecuteMsg::TransferAdmin {
+            address: "new_admin".to_string(),
+        };
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, Some("admin".to_string()));
+        assert_eq!(candidate, Some("new_admin".to_string()));
+
+        // non candidate can't claim admin
+        let info = mock_info("creator", &[]);
+        let msg = ExecuteMsg::ClaimAdminTransfer {};
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        // candidate can claim admin
+        let info = mock_info("new_admin", &[]);
+        let msg = ExecuteMsg::ClaimAdminTransfer {};
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, Some("new_admin".to_string()));
+        assert_eq!(candidate, None);
+
+        // transfer again
+        let info = mock_info("new_admin", &[]);
+        let msg = ExecuteMsg::TransferAdmin {
+            address: "new_admin_2".to_string(),
+        };
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, Some("new_admin".to_string()));
+        assert_eq!(candidate, Some("new_admin_2".to_string()));
+
+        // only candidate can reject admin transfer
+        let info = mock_info("new_admin", &[]);
+        let msg = ExecuteMsg::RejectAdminTransfer {};
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        // candidate can reject admin transfer
+        let info = mock_info("new_admin_2", &[]);
+        let msg = ExecuteMsg::RejectAdminTransfer {};
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, Some("new_admin".to_string()));
+        assert_eq!(candidate, None);
+
+        // transfer again
+        let info = mock_info("new_admin", &[]);
+        let msg = ExecuteMsg::TransferAdmin {
+            address: "new_admin_2".to_string(),
+        };
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, Some("new_admin".to_string()));
+        assert_eq!(candidate, Some("new_admin_2".to_string()));
+
+        // only admin can cancel admin transfer
+        let info = mock_info("new_admin_2", &[]);
+        let msg = ExecuteMsg::CancelAdminTransfer {};
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        // admin can cancel admin transfer
+        let info = mock_info("new_admin", &[]);
+        let msg = ExecuteMsg::CancelAdminTransfer {};
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, Some("new_admin".to_string()));
+        assert_eq!(candidate, None);
+
+        // only admin can revoke admin
+        let info = mock_info("new_admin_2", &[]);
+        let msg = ExecuteMsg::RevokeAdmin {};
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        // admin can revoke admin
+        let info = mock_info("new_admin", &[]);
+        let msg = ExecuteMsg::RevokeAdmin {};
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let (admin, candidate) = query_admin_and_candidate(deps.as_ref());
+        assert_eq!(admin, None);
+        assert_eq!(candidate, None);
+    }
+
+    fn query_admin_and_candidate(deps: Deps) -> (Option<String>, Option<String>) {
+        let AdminResponse { admin } =
+            from_json(query(deps, mock_env(), QueryMsg::Admin {}).unwrap()).unwrap();
+
+        let AdminCandidateResponse { candidate } =
+            from_json(query(deps, mock_env(), QueryMsg::AdminCandidate {}).unwrap()).unwrap();
+
+        (admin, candidate)
     }
 }

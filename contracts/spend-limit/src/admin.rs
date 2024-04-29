@@ -80,11 +80,29 @@ impl Admin {
         }
     }
 
-    pub fn authorized_claim_admin(self, sender: &Addr) -> Result<Self, ContractError> {
+    pub fn authorized_claim_admin_transfer(self, sender: &Addr) -> Result<Self, ContractError> {
         self.authorize_candidate(sender)?;
 
         match self {
             Admin::Transferring { candidate, .. } => Ok(Admin::Settled(candidate)),
+            _ => Err(ContractError::Unauthorized {}),
+        }
+    }
+
+    pub fn authorized_reject_admin_transfer(self, sender: &Addr) -> Result<Self, ContractError> {
+        self.authorize_candidate(sender)?;
+
+        match self {
+            Admin::Transferring { current, .. } => Ok(Admin::Settled(current)),
+            _ => Err(ContractError::Unauthorized {}),
+        }
+    }
+
+    pub fn authorized_cancel_admin_transfer(self, sender: &Addr) -> Result<Self, ContractError> {
+        self.authorize_admin(sender)?;
+
+        match self {
+            Admin::Transferring { current, .. } => Ok(Admin::Settled(current)),
             _ => Err(ContractError::Unauthorized {}),
         }
     }
@@ -236,7 +254,7 @@ mod tests {
             candidate: candidate.clone(),
         };
         assert!(matches!(
-            admin.authorized_claim_admin(&candidate),
+            admin.authorized_claim_admin_transfer(&candidate),
             Ok(Admin::Settled(_))
         ));
     }
@@ -247,6 +265,52 @@ mod tests {
         let candidate = Addr::unchecked("candidate");
         let other_addr = Addr::unchecked("other");
         let admin = Admin::Transferring { current, candidate };
-        assert!(admin.authorized_claim_admin(&other_addr).is_err());
+        assert!(admin.authorized_claim_admin_transfer(&other_addr).is_err());
+    }
+
+    #[test]
+    fn reject_admin_success() {
+        let current = Addr::unchecked("current");
+        let candidate = Addr::unchecked("candidate");
+        let admin = Admin::Transferring {
+            current,
+            candidate: candidate.clone(),
+        };
+        assert!(matches!(
+            admin.authorized_reject_admin_transfer(&candidate),
+            Ok(Admin::Settled(_))
+        ));
+    }
+
+    #[test]
+    fn reject_admin_failure() {
+        let current = Addr::unchecked("current");
+        let candidate = Addr::unchecked("candidate");
+        let other_addr = Addr::unchecked("other");
+        let admin = Admin::Transferring { current, candidate };
+        assert!(admin.authorized_reject_admin_transfer(&other_addr).is_err());
+    }
+
+    #[test]
+    fn cancel_transfer_success() {
+        let current = Addr::unchecked("current");
+        let candidate = Addr::unchecked("candidate");
+        let admin = Admin::Transferring {
+            current: current.clone(),
+            candidate: candidate.clone(),
+        };
+        assert_eq!(
+            admin.authorized_cancel_admin_transfer(&current),
+            Ok(Admin::Settled(current))
+        );
+    }
+
+    #[test]
+    fn cancel_transfer_failure() {
+        let current = Addr::unchecked("current");
+        let candidate = Addr::unchecked("candidate");
+        let other_addr = Addr::unchecked("other");
+        let admin = Admin::Transferring { current, candidate };
+        assert!(admin.authorized_cancel_admin_transfer(&other_addr).is_err());
     }
 }
