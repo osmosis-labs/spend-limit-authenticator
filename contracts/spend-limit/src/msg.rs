@@ -21,7 +21,12 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    TransferAdmin { address: String },
+    SetPriceResolutionConfig {
+        price_resolution_config: PriceResolutionConfig,
+    },
+    TransferAdmin {
+        address: String,
+    },
     ClaimAdminTransfer {},
     RejectAdminTransfer {},
     CancelAdminTransfer {},
@@ -31,6 +36,9 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(PriceResolutionConfigResponse)]
+    PriceResolutionConfig {},
+
     #[returns(SpendingResponse)]
     Spending {
         account: String,
@@ -45,6 +53,11 @@ pub enum QueryMsg {
 
     #[returns(AdminCandidateResponse)]
     AdminCandidate {},
+}
+
+#[cw_serde]
+pub struct PriceResolutionConfigResponse {
+    pub price_resolution_config: PriceResolutionConfig,
 }
 
 #[cw_serde]

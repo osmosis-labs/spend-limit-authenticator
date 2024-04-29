@@ -1,10 +1,10 @@
 use crate::admin::Admin;
 use crate::authenticator::{self};
 use crate::msg::{
-    AdminCandidateResponse, AdminResponse, ExecuteMsg, InstantiateMsg, QueryMsg, SpendingResponse,
-    SpendingsByAccountResponse, SudoMsg,
+    AdminCandidateResponse, AdminResponse, ExecuteMsg, InstantiateMsg,
+    PriceResolutionConfigResponse, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg,
 };
-use crate::price::track_denom;
+use crate::price::{track_denom, PriceResolutionConfig};
 use crate::spend_limit::{updated_spending, SpendLimitError};
 use crate::state::{ADMIN, PRICE_INFOS, PRICE_RESOLUTION_CONFIG, SPENDINGS, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
@@ -71,12 +71,27 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::SetPriceResolutionConfig {
+            price_resolution_config,
+        } => set_price_resolution_config(deps, info, price_resolution_config),
         ExecuteMsg::TransferAdmin { address } => transfer_admin(deps, info, address),
         ExecuteMsg::ClaimAdminTransfer {} => claim_admin_transfer(deps, info),
         ExecuteMsg::RejectAdminTransfer {} => reject_admin_transfer(deps, info),
         ExecuteMsg::CancelAdminTransfer {} => cancel_admin_transfer(deps, info),
         ExecuteMsg::RevokeAdmin {} => revoke_admin(deps, info),
     }
+}
+
+fn set_price_resolution_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    price_resolution_config: PriceResolutionConfig,
+) -> Result<Response, ContractError> {
+    authorize_admin(deps.storage, &info.sender)?;
+
+    PRICE_RESOLUTION_CONFIG.save(deps.storage, &price_resolution_config)?;
+
+    Ok(Response::new().add_attribute("action", "set_price_resolution_config"))
 }
 
 fn transfer_admin(
@@ -136,6 +151,11 @@ fn update_admin(
     Ok(())
 }
 
+fn authorize_admin(store: &mut dyn Storage, sender: &Addr) -> Result<(), ContractError> {
+    let admin = ADMIN.may_load(store)?.unwrap_or(Admin::None);
+    admin.authorize_admin(sender)
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
     match msg {
@@ -160,6 +180,9 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
+        QueryMsg::PriceResolutionConfig {} => to_json_binary(&PriceResolutionConfigResponse {
+            price_resolution_config: PRICE_RESOLUTION_CONFIG.load(deps.storage)?,
+        }),
         QueryMsg::Spending {
             account,
             authenticator_id,
@@ -893,6 +916,67 @@ mod tests {
             transaction: mock_env().transaction,
             contract: mock_env().contract,
         }
+    }
+
+    #[test]
+    fn test_set_price_resolution_config() {
+        let mut deps = mock_dependencies_with_balances(&[("creator", &[Coin::new(100000, UUSDC)])]);
+
+        let init_config = PriceResolutionConfig {
+            quote_denom: UUSDC.to_string(),
+            staleness_threshold: Uint64::from(3_600_000_000u64),
+            twap_duration: Uint64::from(3_600_000_000u64),
+        };
+        let msg = InstantiateMsg {
+            price_resolution_config: init_config.clone(),
+            tracked_denoms: vec![],
+            admin: Some(String::from("admin")),
+        };
+        let info = mock_info("creator", &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let PriceResolutionConfigResponse {
+            price_resolution_config,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::PriceResolutionConfig {},
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(price_resolution_config, init_config);
+
+        let new_config = PriceResolutionConfig {
+            quote_denom: "uosmo".to_string(),
+            staleness_threshold: Uint64::from(7_200_000_000u64),
+            twap_duration: Uint64::from(7_200_000_000u64),
+        };
+        let msg = ExecuteMsg::SetPriceResolutionConfig {
+            price_resolution_config: new_config.clone(),
+        };
+        let info = mock_info("non_admin", &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+        assert_eq!(err, ContractError::Unauthorized {});
+
+        let info = mock_info("admin", &[]);
+        let _ = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let PriceResolutionConfigResponse {
+            price_resolution_config,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::PriceResolutionConfig {},
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(price_resolution_config, new_config);
     }
 
     #[test]
