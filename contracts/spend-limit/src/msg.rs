@@ -16,6 +16,16 @@ pub struct TrackedDenom {
 pub struct InstantiateMsg {
     pub price_resolution_config: PriceResolutionConfig,
     pub tracked_denoms: Vec<TrackedDenom>,
+    pub admin: Option<String>,
+}
+
+#[cw_serde]
+pub enum ExecuteMsg {
+    TransferAdmin { address: String },
+    ClaimAdminTransfer {},
+    RejectAdminTransfer {},
+    CancelAdminTransfer {},
+    RevokeAdmin {},
 }
 
 #[cw_serde]
@@ -29,6 +39,12 @@ pub enum QueryMsg {
 
     #[returns(SpendingsByAccountResponse)]
     SpendingsByAccount { account: String },
+
+    #[returns(AdminResponse)]
+    Admin {},
+
+    #[returns(AdminCandidateResponse)]
+    AdminCandidate {},
 }
 
 #[cw_serde]
@@ -39,4 +55,14 @@ pub struct SpendingResponse {
 #[cw_serde]
 pub struct SpendingsByAccountResponse {
     pub spendings: Vec<(String, Spending)>,
+}
+
+#[cw_serde]
+pub struct AdminResponse {
+    pub admin: Option<String>,
+}
+
+#[cw_serde]
+pub struct AdminCandidateResponse {
+    pub candidate: Option<String>,
 }

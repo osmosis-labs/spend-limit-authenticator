@@ -260,6 +260,7 @@ async fn select_routes(
     let config_only_msg = InstantiateMsg {
         price_resolution_config: conf.price_resolution.clone(),
         tracked_denoms: vec![],
+        admin: conf.admin.clone(),
     };
 
     let mut msg: InstantiateMsg = if target_file.exists() {

@@ -62,6 +62,7 @@ fn test_no_conversion() {
                 twap_duration: 3_600_000_000_000u64.into(),       // 1h
             },
             tracked_denoms: vec![],
+            admin: None,
         },
         &acc_1,
     );
@@ -196,6 +197,7 @@ fn test_fee_draining() {
                 twap_duration: 3_600_000_000_000u64.into(),       // 1h
             },
             tracked_denoms: vec![],
+            admin: None,
         },
         &acc_2,
     );
@@ -471,6 +473,7 @@ fn test_with_conversion() {
                         ],
                     },
                 ],
+                admin: None,
             },
             None,
             Some("spend_limit_authenticator"),
@@ -528,6 +531,7 @@ fn test_with_conversion() {
                     ],
                 },
             ],
+            admin: None,
         },
         &acc_1,
     );
@@ -642,6 +646,7 @@ fn test_setup_and_teardown() {
                 twap_duration: 3_600_000_000_000u64.into(),       // 1h
             },
             tracked_denoms: vec![],
+            admin: None,
         },
         &accs[0],
     );
@@ -845,6 +850,7 @@ fn test_1_click_trading() {
                     ],
                 },
             ],
+            admin: None,
         },
         &acc,
     );

@@ -1,6 +1,7 @@
 use cw_storage_plus::{Item, Map};
 
 use crate::{
+    admin::Admin,
     fee::UntrackedSpentFeeStore,
     price::{PriceInfoStore, PriceResolutionConfig},
     spend_limit::{PreExecBalance, SpendingStore},
@@ -28,3 +29,6 @@ pub const PRICE_RESOLUTION_CONFIG: Item<PriceResolutionConfig> =
 
 /// Store for the price info of the tracked denoms.
 pub const PRICE_INFOS: PriceInfoStore<'_> = Map::new("price_infos");
+
+/// Admin address, Optional.
+pub const ADMIN: Item<Admin> = Item::new("admin");
