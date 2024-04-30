@@ -1,9 +1,9 @@
 use crate::admin::Admin;
 use crate::authenticator::{self};
 use crate::msg::{
-    AdminCandidateResponse, AdminResponse, ExecuteMsg, InstantiateMsg,
+    AdminCandidateResponse, AdminResponse, DenomRemovalTarget, ExecuteMsg, InstantiateMsg,
     PriceResolutionConfigResponse, QueryMsg, SpendingResponse, SpendingsByAccountResponse, SudoMsg,
-    TrackedDenom,
+    TrackedDenom, TrackedDenomsResponse,
 };
 use crate::price::{track_denom, PriceResolutionConfig};
 use crate::spend_limit::{updated_spending, SpendLimitError};
@@ -13,12 +13,15 @@ use crate::ContractError;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     ensure, to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    Storage, Timestamp, Uint64,
+    StdResult, Storage, Timestamp, Uint64,
 };
 use cw2::set_contract_version;
+use cw_storage_plus::Bound;
 
 const CONTRACT_NAME: &str = "crates.io:spend-limit";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const MAX_LIMIT: u32 = 100;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -76,6 +79,7 @@ pub fn execute(
             staleness_threshold,
             twap_duration,
         } => set_price_resolution_config(deps, info, staleness_threshold, twap_duration),
+        ExecuteMsg::RemoveTrackedDenoms { target } => remove_tracked_denoms(deps, info, target),
         ExecuteMsg::SetTrackedDenoms { tracked_denoms } => {
             set_tracked_denoms(deps, env, info, tracked_denoms)
         }
@@ -104,6 +108,26 @@ fn set_price_resolution_config(
     })?;
 
     Ok(Response::new().add_attribute("action", "set_price_resolution_config"))
+}
+
+fn remove_tracked_denoms(
+    deps: DepsMut,
+
+    info: MessageInfo,
+    target: DenomRemovalTarget,
+) -> Result<Response, ContractError> {
+    authorize_admin(deps.storage, &info.sender)?;
+
+    match target {
+        DenomRemovalTarget::All => PRICE_INFOS.clear(deps.storage),
+        DenomRemovalTarget::Partial(denoms) => {
+            for denom in denoms {
+                PRICE_INFOS.remove(deps.storage, &denom);
+            }
+        }
+    }
+
+    Ok(Response::new().add_attribute("action", "remove_tracked_denoms"))
 }
 
 fn set_tracked_denoms(
@@ -221,6 +245,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::PriceResolutionConfig {} => to_json_binary(&PriceResolutionConfigResponse {
             price_resolution_config: PRICE_RESOLUTION_CONFIG.load(deps.storage)?,
         }),
+        QueryMsg::TrackedDenoms { start_after, limit } => {
+            to_json_binary(&query_tracked_denoms(deps, start_after, limit)?)
+        }
         QueryMsg::Spending {
             account,
             authenticator_id,
@@ -280,6 +307,29 @@ pub fn query_spending(
     }
 }
 
+pub fn query_tracked_denoms(
+    deps: Deps,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> Result<TrackedDenomsResponse, ContractError> {
+    let min = start_after.as_ref().map(|s| Bound::exclusive(s.as_str()));
+    let limit = limit.unwrap_or(MAX_LIMIT).min(MAX_LIMIT) as usize;
+
+    let tracked_denoms = PRICE_INFOS
+        .range(deps.storage, min, None, Order::Ascending)
+        .take(limit)
+        .map(|item| -> StdResult<TrackedDenom> {
+            let (denom, info) = item?;
+            Ok(TrackedDenom {
+                denom: denom.to_string(),
+                swap_routes: info.swap_routes,
+            })
+        })
+        .collect::<StdResult<_>>()?;
+
+    Ok(TrackedDenomsResponse { tracked_denoms })
+}
+
 pub fn query_spendings_by_account(
     deps: Deps,
     account: Addr,
@@ -322,7 +372,11 @@ mod tests {
     };
     use osmosis_std::types::{
         cosmos::bank::v1beta1::MsgSend,
-        osmosis::smartaccount::v1beta1::{AccountAuthenticator, GetAuthenticatorResponse},
+        osmosis::{
+            poolmanager::v1beta1::SwapAmountInRoute,
+            smartaccount::v1beta1::{AccountAuthenticator, GetAuthenticatorResponse},
+            twap::v1beta1::ArithmeticTwapToNowResponse,
+        },
     };
 
     use crate::{
@@ -333,7 +387,8 @@ mod tests {
         test_helper::{
             authenticator_setup::SubAuthenticatorData,
             mock_stargate_querier::{
-                get_authenticator_query_handler, mock_dependencies_with_stargate_querier,
+                arithmetic_twap_to_now_query_handler, get_authenticator_query_handler,
+                mock_dependencies_with_stargate_querier,
             },
         },
     };
@@ -1191,4 +1246,357 @@ mod tests {
     // TODO: test set tracked denoms
     // test admin can set tracked denoms
     // need to mock stargate query
+
+    #[test]
+    fn test_set_and_remove_tracked_denoms() {
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[("creator", &[Coin::new(100000, "uusdc")])],
+            arithmetic_twap_to_now_query_handler(Box::new(|req| {
+                let base_asset = req.base_asset.as_str();
+                let quote_asset = req.quote_asset.as_str();
+
+                let arithmetic_twap = match (base_asset, quote_asset) {
+                    ("uosmo", "uusdc") => "1.5",
+                    ("uatom", "uusdc") => "2.5",
+                    ("uion", "uusdc") => "3.5",
+                    ("ustars", "uusdc") => "4.5",
+                    ("uosmo", "uatom") => "0.5",
+                    _ => return ContractResult::Err("Price not found".to_string()),
+                }
+                .to_string();
+
+                ContractResult::Ok(ArithmeticTwapToNowResponse { arithmetic_twap })
+            })),
+        );
+
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: "uusdc".to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![],
+            admin: Some("admin".to_string()),
+        };
+
+        let info = mock_info("creator", &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // query tracked denoms
+        let TrackedDenomsResponse { tracked_denoms } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms, vec![]);
+
+        // set tracked denoms
+        let tracked_denoms = vec![
+            TrackedDenom {
+                denom: "uatom".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 2,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "uion".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 3,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "uosmo".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 1,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "ustars".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 4,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+        ];
+        let info = mock_info("non_admin", &[]);
+        let msg = ExecuteMsg::SetTrackedDenoms {
+            tracked_denoms: tracked_denoms.clone(),
+        };
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        let info = mock_info("admin", &[]);
+        let msg = ExecuteMsg::SetTrackedDenoms {
+            tracked_denoms: tracked_denoms.clone(),
+        };
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // query tracked denoms
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms_response, tracked_denoms);
+
+        // remove tracked denoms
+        let info = mock_info("non_admin", &[]);
+        let msg = ExecuteMsg::RemoveTrackedDenoms {
+            target: DenomRemovalTarget::Partial(vec!["uatom".to_string(), "ustars".to_string()]),
+        };
+
+        let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+
+        assert_eq!(res.unwrap_err(), ContractError::Unauthorized {});
+
+        let info = mock_info("admin", &[]);
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // query tracked denoms
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let expected = vec![
+            TrackedDenom {
+                denom: "uion".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 3,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "uosmo".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 1,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+        ];
+
+        assert_eq!(tracked_denoms_response, expected);
+
+        // set tracked denoms with replacement
+        let tracked_denoms = vec![
+            TrackedDenom {
+                denom: "uosmo".to_string(),
+                swap_routes: vec![
+                    SwapAmountInRoute {
+                        pool_id: 10,
+                        token_out_denom: "uatom".to_string(),
+                    },
+                    SwapAmountInRoute {
+                        pool_id: 2,
+                        token_out_denom: "uusdc".to_string(),
+                    },
+                ],
+            },
+            TrackedDenom {
+                denom: "uatom".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 2,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "ustars".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 4,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+        ];
+
+        let info = mock_info("admin", &[]);
+
+        let msg = ExecuteMsg::SetTrackedDenoms {
+            tracked_denoms: tracked_denoms.clone(),
+        };
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // query tracked denoms
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let expected = vec![
+            TrackedDenom {
+                denom: "uatom".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 2,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "uion".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 3,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+            TrackedDenom {
+                denom: "uosmo".to_string(),
+                swap_routes: vec![
+                    SwapAmountInRoute {
+                        pool_id: 10,
+                        token_out_denom: "uatom".to_string(),
+                    },
+                    SwapAmountInRoute {
+                        pool_id: 2,
+                        token_out_denom: "uusdc".to_string(),
+                    },
+                ],
+            },
+            TrackedDenom {
+                denom: "ustars".to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 4,
+                    token_out_denom: "uusdc".to_string(),
+                }],
+            },
+        ];
+        assert_eq!(tracked_denoms_response, expected);
+
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: None,
+                    limit: Some(2),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms_response, expected[..2]);
+
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: Some("uion".to_string()),
+                    limit: Some(1),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms_response, expected[2..3]);
+
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: Some("uion".to_string()),
+                    limit: Some(2),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms_response, expected[2..]);
+
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: Some("uion".to_string()),
+                    limit: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms_response, expected[2..]);
+
+        // remove all
+        let info = mock_info("admin", &[]);
+
+        let msg = ExecuteMsg::RemoveTrackedDenoms {
+            target: DenomRemovalTarget::All,
+        };
+
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // query tracked denoms
+        let TrackedDenomsResponse {
+            tracked_denoms: tracked_denoms_response,
+        } = from_json(
+            query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::TrackedDenoms {
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(tracked_denoms_response, vec![]);
+    }
 }

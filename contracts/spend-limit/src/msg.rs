@@ -14,6 +14,12 @@ pub struct TrackedDenom {
 }
 
 #[cw_serde]
+pub enum DenomRemovalTarget {
+    All,
+    Partial(Vec<String>),
+}
+
+#[cw_serde]
 pub struct InstantiateMsg {
     pub price_resolution_config: PriceResolutionConfig,
     pub tracked_denoms: Vec<TrackedDenom>,
@@ -22,6 +28,7 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
+    /// Set the price resolution parameters
     SetPriceResolutionParams {
         /// Duration in nanoseconds that the price is considered stale.
         /// If the current time is greater than the last_updated_time + staleness_threshold,
@@ -31,6 +38,11 @@ pub enum ExecuteMsg {
         /// Twap duration in nanoseconds
         twap_duration: Uint64,
     },
+    RemoveTrackedDenoms {
+        target: DenomRemovalTarget,
+    },
+    /// Set tracked denoms, this will overwrite the current tracked denoms if exists
+    /// or add new tracked denoms if not exists
     SetTrackedDenoms {
         tracked_denoms: Vec<TrackedDenom>,
     },
@@ -48,6 +60,12 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(PriceResolutionConfigResponse)]
     PriceResolutionConfig {},
+
+    #[returns(TrackedDenomsResponse)]
+    TrackedDenoms {
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
 
     #[returns(SpendingResponse)]
     Spending {
@@ -68,6 +86,11 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct PriceResolutionConfigResponse {
     pub price_resolution_config: PriceResolutionConfig,
+}
+
+#[cw_serde]
+pub struct TrackedDenomsResponse {
+    pub tracked_denoms: Vec<TrackedDenom>,
 }
 
 #[cw_serde]
