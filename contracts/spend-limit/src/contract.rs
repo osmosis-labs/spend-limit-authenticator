@@ -424,7 +424,7 @@ mod tests {
                         account_authenticator: Some(AccountAuthenticator {
                             id: 2,
                             r#type: "CosmWasmAuthenticatorV1".to_string(),
-                            data: to_json_vec(&CosmwasmAuthenticatorData {
+                            config: to_json_vec(&CosmwasmAuthenticatorData {
                                 contract: mock_env().contract.address.to_string(),
                                 params: to_json_vec(&params_for_querier_setup).unwrap(),
                             })
@@ -708,7 +708,7 @@ mod tests {
                         account_authenticator: Some(AccountAuthenticator {
                             id: 2,
                             r#type: "CosmWasmAuthenticatorV1".to_string(),
-                            data: to_json_vec(&CosmwasmAuthenticatorData {
+                            config: to_json_vec(&CosmwasmAuthenticatorData {
                                 contract: mock_env().contract.address.to_string(),
                                 params: to_json_vec(&params_for_querier_setup[&("addr_a", "1")])
                                     .unwrap(),
@@ -720,16 +720,16 @@ mod tests {
                         account_authenticator: Some(AccountAuthenticator {
                             id: 2,
                             r#type: "AnyOf".to_string(),
-                            data: to_json_vec(&[
+                            config: to_json_vec(&[
                                 SubAuthenticatorData {
-                                    authenticator_type: "Dummy".to_string(),
-                                    data: vec![],
+                                    r#type: "Dummy".to_string(),
+                                    config: vec![],
                                 },
                                 SubAuthenticatorData {
-                                    authenticator_type: "AllOf".to_string(),
-                                    data: to_json_vec(&[SubAuthenticatorData {
-                                        authenticator_type: "CosmWasmAuthenticatorV1".to_string(),
-                                        data: to_json_vec(&CosmwasmAuthenticatorData {
+                                    r#type: "AllOf".to_string(),
+                                    config: to_json_vec(&[SubAuthenticatorData {
+                                        r#type: "CosmWasmAuthenticatorV1".to_string(),
+                                        config: to_json_vec(&CosmwasmAuthenticatorData {
                                             contract: mock_env().contract.address.to_string(),
                                             params: to_json_vec(
                                                 &params_for_querier_setup[&("addr_a", "2.1.0")],
@@ -748,7 +748,7 @@ mod tests {
                         account_authenticator: Some(AccountAuthenticator {
                             id: 2,
                             r#type: "CosmWasmAuthenticatorV1".to_string(),
-                            data: to_json_vec(&CosmwasmAuthenticatorData {
+                            config: to_json_vec(&CosmwasmAuthenticatorData {
                                 contract: mock_env().contract.address.to_string(),
                                 params: to_json_vec(&params_for_querier_setup[&("addr_b", "66")])
                                     .unwrap(),

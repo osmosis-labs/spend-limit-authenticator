@@ -34,8 +34,8 @@ pub struct CosmwasmAuthenticatorData {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct SubAuthenticatorData {
-    pub authenticator_type: String,
-    pub data: Vec<u8>,
+    pub r#type: String,
+    pub config: Vec<u8>,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -102,10 +102,10 @@ impl CompositeAuthenticator for AccountAuthenticator {
         T: DeserializeOwned,
     {
         if path.is_empty() {
-            return from_json(self.data).map_err(CompositeAuthenticatorError::StdError);
+            return from_json(self.config).map_err(CompositeAuthenticatorError::StdError);
         }
 
-        let root_sub_auths: Vec<SubAuthenticatorData> = from_json(self.data)?;
+        let root_sub_auths: Vec<SubAuthenticatorData> = from_json(self.config)?;
         let sub_auths =
             path.iter()
                 .take(path.len() - 1)
@@ -120,7 +120,7 @@ impl CompositeAuthenticator for AccountAuthenticator {
                                         .as_str(),
                                 )
                             })?
-                            .data
+                            .config
                             .as_slice(),
                     )
                     .map_err(CompositeAuthenticatorError::StdError)
@@ -139,7 +139,7 @@ impl CompositeAuthenticator for AccountAuthenticator {
                         .as_str(),
                 )
             })?
-            .data
+            .config
             .as_slice();
 
         from_json(target_data).map_err(CompositeAuthenticatorError::StdError)
@@ -197,7 +197,7 @@ mod tests {
             params: to_json_vec(&params).unwrap(),
         };
         let account_auth = AccountAuthenticator {
-            data: to_json_vec(&target_data).unwrap(),
+            config: to_json_vec(&target_data).unwrap(),
             id: 1,
             r#type: "AllOf".to_string(),
         };
@@ -213,14 +213,14 @@ mod tests {
             params: to_json_vec(&params).unwrap(),
         };
         let account_auth = AccountAuthenticator {
-            data: to_json_vec(&vec![
+            config: to_json_vec(&vec![
                 SubAuthenticatorData {
-                    authenticator_type: "Dummy".to_string(),
-                    data: vec![],
+                    r#type: "Dummy".to_string(),
+                    config: vec![],
                 },
                 SubAuthenticatorData {
-                    authenticator_type: "CosmWasmAuthenticatorV1".to_string(),
-                    data: to_json_vec(&target_data).unwrap(),
+                    r#type: "CosmWasmAuthenticatorV1".to_string(),
+                    config: to_json_vec(&target_data).unwrap(),
                 },
             ])
             .unwrap(),
@@ -240,28 +240,28 @@ mod tests {
         };
 
         let account_auth = AccountAuthenticator {
-            data: to_json_vec(&vec![
+            config: to_json_vec(&vec![
                 SubAuthenticatorData {
-                    authenticator_type: "AnyOf".to_string(),
-                    data: to_json_vec(&vec![
+                    r#type: "AnyOf".to_string(),
+                    config: to_json_vec(&vec![
                         SubAuthenticatorData {
-                            authenticator_type: "Dummy".to_string(),
-                            data: vec![],
+                            r#type: "Dummy".to_string(),
+                            config: vec![],
                         },
                         SubAuthenticatorData {
-                            authenticator_type: "CosmWasmAuthenticatorV1".to_string(),
-                            data: to_json_vec(&target_data).unwrap(),
+                            r#type: "CosmWasmAuthenticatorV1".to_string(),
+                            config: to_json_vec(&target_data).unwrap(),
                         },
                     ])
                     .unwrap(),
                 },
                 SubAuthenticatorData {
-                    authenticator_type: "Dummy".to_string(),
-                    data: vec![],
+                    r#type: "Dummy".to_string(),
+                    config: vec![],
                 },
                 SubAuthenticatorData {
-                    authenticator_type: "Dummy".to_string(),
-                    data: vec![],
+                    r#type: "Dummy".to_string(),
+                    config: vec![],
                 },
             ])
             .unwrap(),

@@ -21,8 +21,8 @@ pub struct CosmwasmAuthenticatorData {
 
 #[derive(Serialize, Deserialize)]
 pub struct SubAuthenticatorData {
-    pub authenticator_type: String,
-    pub data: Vec<u8>,
+    pub r#type: String,
+    pub config: Vec<u8>,
 }
 
 pub fn spend_limit_store_code(wasm: &Wasm<'_, OsmosisTestApp>, acc: &SigningAccount) -> u64 {
@@ -87,15 +87,15 @@ pub fn add_all_of_sig_ver_spend_limit_authenticator(
     add_authenticator(
         app,
         acc,
-        "AllOfAuthenticator",
+        "AllOf",
         &[
             SubAuthenticatorData {
-                authenticator_type: "SignatureVerificationAuthenticator".to_string(),
-                data: acc.public_key().to_bytes(),
+                r#type: "SignatureVerification".to_string(),
+                config: acc.public_key().to_bytes(),
             },
             SubAuthenticatorData {
-                authenticator_type: "CosmwasmAuthenticatorV1".to_string(),
-                data: to_json_binary(&CosmwasmAuthenticatorData {
+                r#type: "CosmwasmAuthenticatorV1".to_string(),
+                config: to_json_binary(&CosmwasmAuthenticatorData {
                     contract: contract.to_string(),
                     params: to_json_binary(params).unwrap().to_vec(),
                 })
@@ -108,7 +108,7 @@ pub fn add_all_of_sig_ver_spend_limit_authenticator(
 
 /// Add 1-click trading authenticator, it is
 /// AllOf(
-///     SignatureVerificationAuthenticator,
+///     SignatureVerification,
 ///     CosmwasmAuthenticatorV1(SpendLimit)),
 ///     AnyOf(
 ///         MessageFilterAuthenticator({"@type":"/osmosis.poolmanager.v1beta1.MsgSwapExactAmountIn"})
@@ -124,15 +124,15 @@ pub fn add_1ct_session_authenticator(
     add_authenticator(
         app,
         acc,
-        "AllOfAuthenticator",
+        "AllOf",
         &[
             SubAuthenticatorData {
-                authenticator_type: "SignatureVerificationAuthenticator".to_string(),
-                data: session_pubkey.to_vec(),
+                r#type: "SignatureVerification".to_string(),
+                config: session_pubkey.to_vec(),
             },
             SubAuthenticatorData {
-                authenticator_type: "CosmwasmAuthenticatorV1".to_string(),
-                data: to_json_binary(&CosmwasmAuthenticatorData {
+                r#type: "CosmwasmAuthenticatorV1".to_string(),
+                config: to_json_binary(&CosmwasmAuthenticatorData {
                     contract: spend_limit_contract.to_string(),
                     params: to_json_binary(params).unwrap().to_vec(),
                 })
@@ -140,17 +140,17 @@ pub fn add_1ct_session_authenticator(
                 .to_vec(),
             },
             SubAuthenticatorData {
-                authenticator_type: "AnyOfAuthenticator".to_string(),
-                data: to_json_binary(&[
+                r#type: "AnyOf".to_string(),
+                config: to_json_binary(&[
                     SubAuthenticatorData {
-                        authenticator_type: "MessageFilterAuthenticator".to_string(),
-                        data: r#"{"@type":"/osmosis.poolmanager.v1beta1.MsgSwapExactAmountIn"}"#
+                        r#type: "MessageFilter".to_string(),
+                        config: r#"{"@type":"/osmosis.poolmanager.v1beta1.MsgSwapExactAmountIn"}"#
                             .as_bytes()
                             .to_vec(),
                     },
                     SubAuthenticatorData {
-                        authenticator_type: "MessageFilterAuthenticator".to_string(),
-                        data: r#"{"@type":"/osmosis.poolmanager.v1beta1.MsgSplitRouteSwapExactAmountIn"}"#
+                        r#type: "MessageFilter".to_string(),
+                        config: r#"{"@type":"/osmosis.poolmanager.v1beta1.MsgSplitRouteSwapExactAmountIn"}"#
                             .as_bytes()
                             .to_vec(),
                     },
