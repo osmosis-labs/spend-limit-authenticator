@@ -224,7 +224,11 @@ impl<'a> Display for RouteChoice<'a> {
         write!(f, "[hops = {}] -({})>", hops, token_in_symbol)?;
 
         for route in self.routes.iter() {
-            let token_out_symbol = self.token_map[&route.token_out_denom].symbol.as_str();
+            let token_out_symbol = self
+                .token_map
+                .get(&route.token_out_denom)
+                .map(|t| t.symbol.as_str())
+                .unwrap_or("-");
             let pool_info = self.pool_infos.get(&route.pool_id).unwrap();
             let liquidity = (self.liquidities.get(&route.pool_id).unwrap().round() as u64)
                 .to_formatted_string(&Locale::en);
