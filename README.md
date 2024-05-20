@@ -1,6 +1,6 @@
 # Spend Limit Authenticator
 
-Spend limit Authenticator is a CosmWasm [authenticator](https://github.com/osmosis-labs/osmosis/tree/feat/smart-accounts/x/authenticator) that allows users/application to set a spend limit on their account authentication path (each account can have multiple root authenticator, account-wide limit is currently not supported).
+Spend limit Authenticator is a CosmWasm [authenticator](https://github.com/osmosis-labs/osmosis/blob/main/x/smart-account/README.md) that allows users/application to set a spend limit on their account authentication path (each account can have multiple root authenticator, account-wide limit is currently not supported).
 
 ## Overview
 
