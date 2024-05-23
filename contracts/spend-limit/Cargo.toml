@@ -34,7 +34,3 @@ mock-cosmwasm-contract = "0.1.2"
 osmosis-test-tube = { git = " https://github.com/osmosis-labs/test-tube", rev = "a7e1de5" }
 # osmosis-test-tube = { path = "../../../test-tube/packages/osmosis-test-tube" }
 rstest = "0.18.2"
-
-[[bin]]
-name = "schema"
-path = "src/_bin/schema.rs"
