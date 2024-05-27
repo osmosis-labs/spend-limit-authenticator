@@ -1792,6 +1792,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "passkey-authenticator"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std 1.5.2",
+ "cw-storage-plus",
+ "cw2",
+ "itertools 0.12.1",
+ "mock-cosmwasm-contract",
+ "osmosis-authenticators",
+ "osmosis-std 0.24.0 (git+https://github.com/osmosis-labs/osmosis-rust?rev=c475cb9)",
+ "osmosis-test-tube",
+ "rstest",
+ "schemars",
+ "serde",
+ "thiserror",
+ "time",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
