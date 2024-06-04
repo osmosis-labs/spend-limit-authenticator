@@ -6,9 +6,9 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = {version = "4.5.4", features = ["derive"]}
+clap = { version = "4.5.4", features = ["derive"] }
 colored = "2.1.0"
-cosmwasm-std = "2.0.0"
+cosmwasm-std = "1.5.5"
 error-chain = "0.12.4"
 futures = "0.3.30"
 indicatif = "0.17.8"
@@ -18,7 +18,7 @@ percent-encoding = "2.3.1"
 reqwest = "0.12.0"
 serde = "1.0.197"
 serde_json = "1.0.114"
-spend_limit = {path = "../contracts/spend-limit"}
-time = {version = "0.3.34", features = ["formatting"]}
-tokio = {version = "1.36.0", features = ["full"]}
+spend_limit = { path = "../contracts/spend-limit" }
+time = { version = "0.3.34", features = ["formatting"] }
+tokio = { version = "1.36.0", features = ["full"] }
 toml = "0.8.12"
