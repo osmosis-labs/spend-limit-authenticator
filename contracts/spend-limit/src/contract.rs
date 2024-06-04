@@ -361,6 +361,7 @@ pub fn query_spendings_by_account(
 mod tests {
     use std::collections::BTreeMap;
 
+    use authenticator::SubAuthenticatorData;
     use cosmwasm_std::{
         from_json,
         testing::{mock_dependencies, mock_dependencies_with_balances, mock_env, mock_info},
@@ -384,12 +385,9 @@ mod tests {
         fee::UntrackedSpentFee,
         period::Period,
         state::UNTRACKED_SPENT_FEES,
-        test_helper::{
-            authenticator_setup::SubAuthenticatorData,
-            mock_stargate_querier::{
-                arithmetic_twap_to_now_query_handler, get_authenticator_query_handler,
-                mock_dependencies_with_stargate_querier,
-            },
+        test_helper::mock_stargate_querier::{
+            arithmetic_twap_to_now_query_handler, get_authenticator_query_handler,
+            mock_dependencies_with_stargate_querier,
         },
     };
     use crate::{

@@ -1,3 +1,5 @@
+mod serde;
+
 pub mod authenticator;
 
 pub mod admin;

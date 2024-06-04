@@ -29,12 +29,22 @@ impl CompositeAuthenticatorError {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct CosmwasmAuthenticatorData {
     pub contract: String,
+
+    #[serde(
+        serialize_with = "crate::serde::as_base64_encoded_string::serialize",
+        deserialize_with = "crate::serde::as_base64_encoded_string::deserialize"
+    )]
     pub params: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct SubAuthenticatorData {
     pub r#type: String,
+
+    #[serde(
+        serialize_with = "crate::serde::as_base64_encoded_string::serialize",
+        deserialize_with = "crate::serde::as_base64_encoded_string::deserialize"
+    )]
     pub config: Vec<u8>,
 }
 
@@ -286,5 +296,22 @@ mod tests {
             result.unwrap_err(),
             CompositeAuthenticatorError::invalid_composite_id("1.10")
         );
+    }
+
+    #[test]
+    fn test_child_authenticator_data_with_raw_data() {
+        let account_auth = AccountAuthenticator {
+            config: r#"[{"type":"SignatureVerification","config":"ApNMBAr8lFRS6DaOKXgGXFcrpf78KHyqPvRCLZrM0Zzg"},{"type":"CosmwasmAuthenticatorV1","config":"eyJjb250cmFjdCI6ICJvc21vMTZlbDg3dGZ6Y3F3YWVxcmE3ZTV5M2h4ZHhnMmo1Zzh5cGZkMHBtdWt1eGc4MjJsaDVyY3FodWd1N2QiLCAicGFyYW1zIjogImV5SjBhVzFsWDJ4cGJXbDBJam9nZXlKbGJtUWlPaUFpTVRjeE56UTFNVGcxTmpVd05EQTJOVFl3TWlKOUxDQWljbVZ6WlhSZmNHVnlhVzlrSWpvZ0ltUmhlU0lzSUNKc2FXMXBkQ0k2SUNJeE1EQXdNQ0o5In0="},{"type":"MessageFilter","config":"eyJAdHlwZSI6Ii9vc21vc2lzLnBvb2xtYW5hZ2VyLnYxYmV0YTEuTXNnU3dhcEV4YWN0QW1vdW50SW4ifQ=="}]"#.as_bytes().to_vec(),
+            id: 5,
+            r#type: "AllOf".to_string(),
+        };
+
+        let cosmwasm_auth_data: CosmwasmAuthenticatorData =
+            account_auth.clone().child_authenticator_data(&[1]).unwrap();
+
+        assert_eq!(cosmwasm_auth_data, CosmwasmAuthenticatorData {
+            contract: "osmo16el87tfzcqwaeqra7e5y3hxdxg2j5g8ypfd0pmukuxg822lh5rcqhugu7d".to_string(),
+            params: r#"{"time_limit": {"end": "1717451856504065602"}, "reset_period": "day", "limit": "10000"}"#.as_bytes().to_vec(),
+        });
     }
 }

@@ -9,21 +9,13 @@ use osmosis_std::types::osmosis::smartaccount::v1beta1::{
     MsgAddAuthenticator, MsgAddAuthenticatorResponse,
 };
 use osmosis_test_tube::{Account, OsmosisTestApp, Runner, SigningAccount, Wasm};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use crate::{msg::InstantiateMsg, spend_limit::SpendLimitParams};
-
-#[derive(Serialize, Deserialize)]
-pub struct CosmwasmAuthenticatorData {
-    pub contract: String,
-    pub params: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SubAuthenticatorData {
-    pub r#type: String,
-    pub config: Vec<u8>,
-}
+use crate::{
+    authenticator::{CosmwasmAuthenticatorData, SubAuthenticatorData},
+    msg::InstantiateMsg,
+    spend_limit::SpendLimitParams,
+};
 
 pub fn spend_limit_store_code(wasm: &Wasm<'_, OsmosisTestApp>, acc: &SigningAccount) -> u64 {
     let wasm_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
