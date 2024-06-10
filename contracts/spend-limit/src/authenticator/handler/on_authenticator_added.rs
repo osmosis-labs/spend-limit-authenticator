@@ -1,5 +1,5 @@
 use cosmwasm_std::{ensure, DepsMut, Env, Response};
-use osmosis_authenticators::OnAuthenticatorAddedRequest;
+use cw_authenticator::OnAuthenticatorAddedRequest;
 
 use crate::{
     authenticator::{handler::validate_and_parse_params, AuthenticatorError},

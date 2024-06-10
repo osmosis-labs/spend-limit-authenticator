@@ -1,5 +1,5 @@
 use cosmwasm_std::{DepsMut, Env, Response};
-use osmosis_authenticators::OnAuthenticatorRemovedRequest;
+use cw_authenticator::OnAuthenticatorRemovedRequest;
 
 use crate::{authenticator::AuthenticatorError, state::SPENDINGS};
 

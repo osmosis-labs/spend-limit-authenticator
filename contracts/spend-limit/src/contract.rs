@@ -229,7 +229,9 @@ pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractE
             authenticator::on_authenticator_removed(deps, env, on_authenticator_removed_request)
                 .map_err(ContractError::from)
         }
-        SudoMsg::Authenticate(auth_request) => authenticator::authenticate(deps, env, auth_request),
+        SudoMsg::Authenticate(auth_request) => {
+            authenticator::authenticate(deps, env, *auth_request)
+        }
         SudoMsg::Track(track_request) => {
             authenticator::track(deps, env, track_request).map_err(ContractError::from)
         }
@@ -367,7 +369,7 @@ mod tests {
         testing::{mock_dependencies, mock_dependencies_with_balances, mock_env, mock_info},
         to_json_vec, BlockInfo, Coin, ContractResult, Uint128, Uint64,
     };
-    use osmosis_authenticators::{
+    use cw_authenticator::{
         Any, AuthenticationRequest, ConfirmExecutionRequest, OnAuthenticatorAddedRequest,
         OnAuthenticatorRemovedRequest, SignModeTxData, SignatureData, TrackRequest, TxData,
     };
@@ -475,7 +477,7 @@ mod tests {
         sudo(
             deps.as_mut(),
             mock_env(),
-            SudoMsg::Authenticate(AuthenticationRequest {
+            SudoMsg::Authenticate(Box::new(AuthenticationRequest {
                 authenticator_id: "2".to_string(),
                 account: Addr::unchecked("limited_account"),
                 fee_payer: Addr::unchecked("limited_account"),
@@ -502,7 +504,7 @@ mod tests {
                 },
                 simulate: false,
                 authenticator_params: Some(authenticator_params.clone()),
-            }),
+            })),
         )
         .unwrap();
 

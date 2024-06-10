@@ -1,5 +1,5 @@
 use cosmwasm_std::{DepsMut, Env, Response};
-use osmosis_authenticators::ConfirmExecutionRequest;
+use cw_authenticator::ConfirmExecutionRequest;
 
 use crate::spend_limit::{
     calculate_received_coins, calculate_spent_coins, update_and_check_spend_limit, SpendLimitParams,
@@ -88,7 +88,7 @@ mod tests {
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Response, Uint128,
     };
-    use osmosis_authenticators::ConfirmExecutionRequest;
+    use cw_authenticator::ConfirmExecutionRequest;
     use rstest::rstest;
 
     use crate::period::Period;
@@ -177,7 +177,7 @@ mod tests {
                 })
                 .unwrap(),
             ),
-            msg: osmosis_authenticators::Any {
+            msg: cw_authenticator::Any {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },

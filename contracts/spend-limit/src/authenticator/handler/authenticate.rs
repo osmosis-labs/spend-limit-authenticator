@@ -1,5 +1,5 @@
 use cosmwasm_std::{Coins, DepsMut, Env, Response, Timestamp};
-use osmosis_authenticators::AuthenticationRequest;
+use cw_authenticator::AuthenticationRequest;
 
 use crate::{
     fee::get_account_spending_fee,
@@ -86,7 +86,7 @@ mod tests {
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, ContractResult, Timestamp,
     };
-    use osmosis_authenticators::{Any, SignModeTxData, SignatureData, TxData};
+    use cw_authenticator::{Any, SignModeTxData, SignatureData, TxData};
     use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
     use osmosis_std::types::osmosis::twap::v1beta1::ArithmeticTwapToNowResponse;
     use rstest::rstest;

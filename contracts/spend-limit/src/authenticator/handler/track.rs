@@ -2,7 +2,7 @@ use crate::fee::get_account_spending_fee;
 use crate::state::{PRE_EXEC_BALANCES, UNTRACKED_SPENT_FEES};
 use crate::ContractError;
 use cosmwasm_std::{DepsMut, Env, Response};
-use osmosis_authenticators::TrackRequest;
+use cw_authenticator::TrackRequest;
 
 use super::validate_and_parse_params;
 
@@ -53,7 +53,7 @@ mod tests {
         testing::{mock_dependencies_with_balances, mock_env},
         to_json_binary, Addr, Binary, Coin, Uint128,
     };
-    use osmosis_authenticators::TrackRequest;
+    use cw_authenticator::TrackRequest;
 
     #[test]
     fn test_track_success() {
@@ -73,7 +73,7 @@ mod tests {
                 })
                 .unwrap(),
             ),
-            msg: osmosis_authenticators::Any {
+            msg: cw_authenticator::Any {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
@@ -126,7 +126,7 @@ mod tests {
                 })
                 .unwrap(),
             ),
-            msg: osmosis_authenticators::Any {
+            msg: cw_authenticator::Any {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
@@ -187,7 +187,7 @@ mod tests {
                 })
                 .unwrap(),
             ),
-            msg: osmosis_authenticators::Any {
+            msg: cw_authenticator::Any {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
@@ -251,7 +251,7 @@ mod tests {
                 })
                 .unwrap(),
             ),
-            msg: osmosis_authenticators::Any {
+            msg: cw_authenticator::Any {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },
@@ -315,7 +315,7 @@ mod tests {
                 })
                 .unwrap(),
             ),
-            msg: osmosis_authenticators::Any {
+            msg: cw_authenticator::Any {
                 type_url: "".to_string(),
                 value: Binary::default(),
             },

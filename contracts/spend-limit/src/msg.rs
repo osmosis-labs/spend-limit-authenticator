@@ -4,8 +4,8 @@ pub use osmosis_std::types::osmosis::poolmanager::v1beta1::SwapAmountInRoute;
 
 use crate::{price::PriceResolutionConfig, spend_limit::Spending};
 
-// re-export the structs from osmosis_authenticators
-pub use osmosis_authenticators::AuthenticatorSudoMsg as SudoMsg;
+// re-export the structs from cw_authenticator
+pub use cw_authenticator::AuthenticatorSudoMsg as SudoMsg;
 
 #[cw_serde]
 pub struct TrackedDenom {

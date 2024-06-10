@@ -13,7 +13,7 @@ cosmwasm-std = { version = "1.5.5", features = ["stargate", "cosmwasm_1_1"] }
 cw-storage-plus = "1.1.0"
 cw2 = "1.1.2"
 itertools = "0.12.1"
-osmosis-authenticators = "0.22.0-alpha.19"
+cw-authenticator = "1.0.0"
 osmosis-std = "0.25.0"
 # osmosis-std = { path = "../../../osmosis-rust/packages/osmosis-std" }
 rstest = "0.18.2"
