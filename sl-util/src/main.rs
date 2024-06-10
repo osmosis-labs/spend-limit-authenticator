@@ -380,7 +380,7 @@ async fn select_routes(
 
         let spinner = ProgressBar::new_spinner();
         spinner.set_message("Fetching available routes...");
-        let swap_routes = get_route(
+        let mut swap_routes = get_route(
             denom.to_string().as_str(),
             qoute_denom.as_str(),
             blacklisted_pools,
@@ -394,12 +394,12 @@ async fn select_routes(
 
         // select route
         'select_route: loop {
-            let route_choices = swap_routes
+            let mut route_choices = swap_routes
                 .clone()
-                .into_iter()
+                .iter()
                 .map(|routes| RouteChoice {
                     token_in: denom.as_str(),
-                    routes,
+                    routes: routes.to_vec(),
                     token_map: &token_map,
                     pool_infos: &pool_infos,
                     liquidities: &liquidities,
@@ -407,20 +407,32 @@ async fn select_routes(
                 .collect::<Vec<_>>();
 
             let symbol = token_map[denom.as_str()].symbol.as_str();
-            let route_choice = Select::new(
-                format!(
-                    "<{}/{}> `{}` route =",
-                    progress + index + 1,
-                    total_selection_count,
-                    symbol
-                )
-                .as_str(),
-                route_choices,
-            )
-            .with_render_config(
-                RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
-            )
-            .prompt()?;
+            // let route_choice = Select::new(
+            //     format!(
+            //         "<{}/{}> `{}` route =",
+            //         progress + index + 1,
+            //         total_selection_count,
+            //         symbol
+            //     )
+            //     .as_str(),
+            //     route_choices,
+            // )
+            // .with_render_config(
+            //     RenderConfig::default().with_option_index_prefix(IndexPrefix::SpacePadded),
+            // )
+            // .prompt()?;
+            //
+            // Choose the route with the highest liquidity (summed from all their liquidities)
+            let route_choice = route_choices
+                .iter()
+                .max_by(|a, b| {
+                    let sum_a: f64 = a.liquidities.iter().map(|liquidity| liquidity.1).sum();
+                    let sum_b: f64 = b.liquidities.iter().map(|liquidity| liquidity.1).sum();
+                    sum_a
+                        .partial_cmp(&sum_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .expect("route_choices should not be empty");
 
             let mut token_in_denom = denom.to_string();
             let mut resulted_price = Decimal::one();
@@ -477,6 +489,9 @@ async fn select_routes(
                             token_in_symbol, token_out_symbol, e
                         );
                         eprintln!("{}", m.yellow().bold());
+
+                        swap_routes.retain(|routes| routes != &route_choice.routes);
+
                         // if failed to fetch twap, restart selecting route
                         continue 'select_route;
                     }
@@ -486,31 +501,16 @@ async fn select_routes(
                 token_in_denom = route.token_out_denom.clone();
             }
 
-            if skip_manual_price_confirmation {
-                println!(
-                    "\t🪙 {}/{} = {}",
-                    token_map[denom.as_str()].symbol,
-                    token_map[qoute_denom.as_str()].symbol,
-                    resulted_price
-                );
-            } else {
-                let confirm = Confirm::new(&format!(
-                    "🪙 {}/{} = {}, OK?",
-                    token_map[denom.as_str()].symbol,
-                    token_map[qoute_denom.as_str()].symbol,
-                    resulted_price
-                ))
-                .prompt()?;
-
-                // if not ok, restart selecting route
-                if !confirm {
-                    continue 'select_route;
-                }
-            }
+            println!(
+                "\t🪙 {}/{} = {}",
+                token_map[denom.as_str()].symbol,
+                token_map[qoute_denom.as_str()].symbol,
+                resulted_price
+            );
 
             let res = TrackedDenom {
                 denom: denom.to_string(),
-                swap_routes: route_choice.routes,
+                swap_routes: route_choice.routes.clone(),
             };
 
             msg.tracked_denoms.push(res);

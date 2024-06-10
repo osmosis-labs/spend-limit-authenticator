@@ -15,6 +15,8 @@ pub async fn arithmetic_twap_to_now(
     quote_denom: &str,
     start_time: time::OffsetDateTime,
 ) -> Result<Decimal> {
+    // sleep for one second to avoid rate limiting
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     let start_time = start_time.format(&Iso8601::DEFAULT)?;
     let url = format!(
         "https://lcd.osmosis.zone/osmosis/twap/v1beta1/ArithmeticTwapToNow?pool_id={}&base_asset={}&quote_asset={}&start_time={}",
