@@ -73,9 +73,10 @@ impl Admin {
 
         match self {
             Admin::Settled(current) => Ok(Admin::Transferring { current, candidate }),
-            Admin::Transferring { current, candidate } => {
-                Ok(Admin::Transferring { current, candidate })
-            }
+            Admin::Transferring {
+                current,
+                candidate: _old_candidate,
+            } => Ok(Admin::Transferring { current, candidate }),
             Admin::None => Err(ContractError::Unauthorized {}),
         }
     }
@@ -232,6 +233,24 @@ mod tests {
                 candidate: _
             })
         ));
+    }
+
+    #[test]
+    fn transfer_admin_success_on_transferring_state() {
+        let addr = Addr::unchecked("admin");
+        let prev_candidate = Addr::unchecked("prev_candidate");
+        let candidate = Addr::unchecked("candidate");
+        let admin = Admin::Transferring {
+            current: addr.clone(),
+            candidate: prev_candidate,
+        };
+        assert_eq!(
+            admin.authorized_transfer_admin(&addr, candidate.clone()),
+            Ok(Admin::Transferring {
+                current: addr,
+                candidate,
+            })
+        );
     }
 
     #[test]

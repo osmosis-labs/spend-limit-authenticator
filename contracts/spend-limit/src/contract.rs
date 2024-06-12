@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::admin::Admin;
 use crate::authenticator::{self};
 use crate::msg::{
@@ -25,7 +27,7 @@ const MAX_LIMIT: u32 = 100;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
-    mut deps: DepsMut,
+    deps: DepsMut,
     env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
@@ -51,18 +53,7 @@ pub fn instantiate(
 
     PRICE_RESOLUTION_CONFIG.save(deps.storage, &conf)?;
 
-    for tracked_denom in msg.tracked_denoms {
-        let denom = tracked_denom.denom;
-        let swap_routes = tracked_denom.swap_routes;
-        track_denom(
-            &PRICE_INFOS,
-            deps.branch(),
-            &conf,
-            &denom,
-            env.block.time,
-            swap_routes,
-        )?;
-    }
+    track_all_denoms(deps, env, &conf, msg.tracked_denoms)?;
 
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
@@ -131,7 +122,7 @@ fn remove_tracked_denoms(
 }
 
 fn set_tracked_denoms(
-    mut deps: DepsMut,
+    deps: DepsMut,
     env: Env,
     info: MessageInfo,
     tracked_denoms: Vec<TrackedDenom>,
@@ -140,20 +131,42 @@ fn set_tracked_denoms(
 
     let conf = PRICE_RESOLUTION_CONFIG.load(deps.storage)?;
 
+    track_all_denoms(deps, env, &conf, tracked_denoms)?;
+
+    Ok(Response::new().add_attribute("action", "set_tracked_denoms"))
+}
+
+fn track_all_denoms(
+    mut deps: DepsMut,
+    env: Env,
+    conf: &PriceResolutionConfig,
+    tracked_denoms: Vec<TrackedDenom>,
+) -> Result<(), ContractError> {
+    let mut denoms = HashSet::new();
+    denoms.insert(conf.quote_denom.to_owned());
+
     for tracked_denom in tracked_denoms {
         let denom = tracked_denom.denom;
+
+        // check for duplicated denoms
+        if denoms.contains(denom.as_str()) {
+            return Err(ContractError::DuplicatedDenom { denom });
+        } else {
+            denoms.insert(denom.to_owned());
+        }
+
         let swap_routes = tracked_denom.swap_routes;
         track_denom(
             &PRICE_INFOS,
             deps.branch(),
-            &conf,
-            &denom,
+            conf,
+            denom.as_str(),
             env.block.time,
             swap_routes,
         )?;
     }
 
-    Ok(Response::new().add_attribute("action", "set_tracked_denoms"))
+    Ok(())
 }
 
 fn transfer_admin(
@@ -660,6 +673,134 @@ mod tests {
             res,
             ContractError::InvalidDenom {
                 denom: "uinvalid".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_set_tracked_denom() {
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[],
+            arithmetic_twap_to_now_query_handler(Box::new(|_| {
+                ContractResult::Ok(ArithmeticTwapToNowResponse {
+                    arithmetic_twap: "1".to_string(),
+                })
+            })),
+        );
+
+        let admin = deps.api.addr_make("admin");
+
+        deps.querier.update_balance(
+            admin.clone(),
+            vec![Coin::new(1_000_000, UUSDC), Coin::new(1_000_000, "udup")],
+        );
+
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: UUSDC.to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![],
+            admin: Some(admin.to_string()),
+        };
+        let info = mock_info(admin.as_str(), &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let msg = ExecuteMsg::SetTrackedDenoms {
+            tracked_denoms: vec![
+                TrackedDenom {
+                    denom: "udup".to_string(),
+                    swap_routes: vec![SwapAmountInRoute {
+                        pool_id: 1u64,
+                        token_out_denom: UUSDC.to_string(),
+                    }],
+                },
+                TrackedDenom {
+                    denom: "udup".to_string(),
+                    swap_routes: vec![SwapAmountInRoute {
+                        pool_id: 2u64,
+                        token_out_denom: UUSDC.to_string(),
+                    }],
+                },
+            ],
+        };
+
+        let info = mock_info(admin.as_str(), &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+
+        assert_eq!(
+            err,
+            ContractError::DuplicatedDenom {
+                denom: "udup".to_string()
+            }
+        );
+
+        // quote denom also counted as duplicated
+        let msg = ExecuteMsg::SetTrackedDenoms {
+            tracked_denoms: vec![TrackedDenom {
+                denom: UUSDC.to_string(),
+                swap_routes: vec![SwapAmountInRoute {
+                    pool_id: 100u64,
+                    token_out_denom: UUSDC.to_string(),
+                }],
+            }],
+        };
+
+        let info = mock_info(admin.as_str(), &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+
+        assert_eq!(
+            err,
+            ContractError::DuplicatedDenom {
+                denom: UUSDC.to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_initialize_with_duplicated_denom() {
+        let mut deps = mock_dependencies_with_stargate_querier(
+            &[],
+            arithmetic_twap_to_now_query_handler(Box::new(|_| {
+                ContractResult::Ok(ArithmeticTwapToNowResponse {
+                    arithmetic_twap: "1".to_string(),
+                })
+            })),
+        );
+        deps.querier
+            .update_balance("creator", vec![Coin::new(1_000_000, "uvalid")]);
+
+        let msg = InstantiateMsg {
+            price_resolution_config: PriceResolutionConfig {
+                quote_denom: "uvalid".to_string(),
+                staleness_threshold: Uint64::from(3_600_000_000u64),
+                twap_duration: Uint64::from(3_600_000_000u64),
+            },
+            tracked_denoms: vec![
+                TrackedDenom {
+                    denom: "udup".to_string(),
+                    swap_routes: vec![SwapAmountInRoute {
+                        pool_id: 1u64,
+                        token_out_denom: "uvalid".to_string(),
+                    }],
+                },
+                TrackedDenom {
+                    denom: "udup".to_string(),
+                    swap_routes: vec![SwapAmountInRoute {
+                        pool_id: 2u64,
+                        token_out_denom: "uvalid".to_string(),
+                    }],
+                },
+            ],
+            admin: None,
+        };
+        let info = mock_info("creator", &[]);
+        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(
+            res,
+            ContractError::DuplicatedDenom {
+                denom: "udup".to_string()
             }
         );
     }
