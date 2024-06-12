@@ -53,14 +53,12 @@ impl Period {
         Ok(match self {
             Period::Day => previous.date() < current.date(),
             Period::Week => {
-                let prev_spent_at_week = previous.monday_based_week();
-                let current_week = current.monday_based_week();
+                let (prev_iso_year, prev_iso_week, _) = previous.to_iso_week_date();
+                let (current_iso_year, current_iso_week, _) = current.to_iso_week_date();
 
-                let has_entered_new_year = previous.year() < current.year();
-                let is_same_year_but_entered_new_week =
-                    previous.year() == current.year() && prev_spent_at_week < current_week;
-
-                has_entered_new_year || is_same_year_but_entered_new_week
+                // date in the same week that span across two years
+                // will have the same iso year and iso week.
+                prev_iso_year < current_iso_year || prev_iso_week < current_iso_week
             }
             Period::Month => {
                 let prev_spent_at_month = previous.month() as u8;
@@ -107,6 +105,7 @@ mod tests {
     #[case(Period::Week, datetime!(2024-01-01 0:00:00 UTC), datetime!(2025-01-02 00:00:00 UTC), Ok(true))]
     #[case(Period::Week, datetime!(2024-01-01 0:00:00 UTC), datetime!(2024-01-07 23:59:59 UTC), Ok(false))]
     #[case(Period::Week, datetime!(2024-01-01 0:00:00 UTC), datetime!(2024-01-01 00:00:00 UTC), Ok(false))]
+    #[case(Period::Week, datetime!(2025-12-31 0:00:00 UTC), datetime!(2026-01-01 00:00:00 UTC), Ok(false))]
     // month
     #[case(Period::Month, datetime!(2022-01-01 0:00:00 UTC), datetime!(2022-02-01 00:00:00 UTC), Ok(true))]
     #[case(Period::Month, datetime!(2022-01-02 0:01:00 UTC), datetime!(2022-02-02 00:01:02 UTC), Ok(true))]
