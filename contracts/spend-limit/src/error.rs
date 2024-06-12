@@ -25,6 +25,9 @@ pub enum ContractError {
     #[error("Invalid denom: {denom}")]
     InvalidDenom { denom: String },
 
+    #[error("Duplicated denom: {denom}")]
+    DuplicatedDenom { denom: String },
+
     #[error("Current time {current} not within time limit {start:?} - {end}")]
     NotWithinTimeLimit {
         current: Timestamp,
