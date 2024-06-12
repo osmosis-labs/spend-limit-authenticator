@@ -450,9 +450,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-schema"
-version = "1.5.2"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b166215fbfe93dc5575bae062aa57ae7bb41121cffe53bac33b033257949d2a9"
+checksum = "7879036156092ad1c22fe0d7316efc5a5eceec2bc3906462a2560215f2a2f929"
 dependencies = [
  "cosmwasm-schema-derive",
  "schemars",
@@ -463,9 +463,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-schema-derive"
-version = "1.5.2"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bf12f8e20bb29d1db66b7ca590bc2f670b548d21e9be92499bc0f9022a994a8"
+checksum = "0bb57855fbfc83327f8445ae0d413b1a05ac0d68c396ab4d122b2abd7bb82cb6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -574,6 +574,17 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle-ng",
  "zeroize",
+]
+
+[[package]]
+name = "cw-authenticator"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf4ff78e38f2ac23efd7d4f54e83a708ef5625f279cd3db40485d71133dbeec9"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -1637,17 +1648,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "osmosis-authenticators"
-version = "0.22.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "592ed3c1f64d2b910ffffef86d6c6297690c65029162b810541107cd0e1f97f5"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "sha2 0.10.8",
-]
-
-[[package]]
 name = "osmosis-std"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2520,11 +2520,11 @@ version = "1.0.0-alpha.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-authenticator",
  "cw-storage-plus",
  "cw2",
  "itertools 0.12.1",
  "mock-cosmwasm-contract",
- "osmosis-authenticators",
  "osmosis-std",
  "osmosis-test-tube",
  "rstest",
