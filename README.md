@@ -32,7 +32,8 @@ For each transaction, the authenticator will check if the transaction amount is 
 Building wasm binary for testing:
 
 ```sh
-beaker wasm build --no-wasm-opt
+cd contract/spend-limit
+cargo wasm
 ```
 
 Note that the flag `--no-wasm-opt` is used to disable wasm-opt optimization. This is useful for debugging and testing and small enough since debug symbols are stripped, it's not recommended for production. Omit this flag for production build.
